@@ -77,6 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     ///
     ///     audiolens://show                        the window
     ///     audiolens://compact                     the compact panel
+    ///     audiolens://menubar                     the menu bar drop-down
     ///     audiolens://settings                    Settings
     ///     audiolens://volume?app=<bundle id>&value=<0–150>
     ///     audiolens://mute?app=<bundle id>&on=<1|0>   (no "on" toggles)
@@ -89,6 +90,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 .compactMap { item in item.value.map { (item.name, $0) } } ?? [], uniquingKeysWith: { _, b in b })
             switch url.host {
             case "compact": MainWindow.shared.show(compact: true)
+            case "menubar":
+                // After the URL's own activation settles, or the transient popover closes at once.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                    guard let self, let button = self.statusItem?.button, self.statusItem?.isVisible == true else { return }
+                    if self.popover?.isShown != true { self.togglePopover(button) }
+                }
             case "settings": SettingsWindow.shared.show()
             case "volume", "mute": adjustApp(url.host!, query)
             case "eq": adjustEQ(query)
@@ -263,10 +270,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let p = NSPopover()
             p.behavior = .transient
             p.animates = true
-            p.contentViewController = NSHostingController(rootView: CompactPanel(mode: .menuBar))
+            let hosting = NSHostingController(rootView: CompactPanel(mode: .menuBar))
+            // A fixed size set here, not SwiftUI's ideal size: the panel's scrolling list has no
+            // natural height, and a popover taller than the room under the menu bar gets pushed
+            // up over it.
+            hosting.sizingOptions = []
+            p.contentViewController = hosting
             return p
         }()
         self.popover = popover
+        let room = (sender.window?.screen ?? NSScreen.main)?.visibleFrame.height ?? 800
+        popover.contentSize = NSSize(width: CompactPanel.width, height: min(560, max(room - 30, 300)))
         NSApp.activate(ignoringOtherApps: true)
         popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
         popover.contentViewController?.view.window?.makeKey()

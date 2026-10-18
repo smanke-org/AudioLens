@@ -6,6 +6,8 @@ struct CompactPanel: View {
     enum Mode { case menuBar, window }
     enum Tab: String, CaseIterable { case apps = "Apps", devices = "Devices", eq = "EQ" }
 
+    static let width: CGFloat = 340
+
     let mode: Mode
     @State private var tab = Tab.apps
     @State private var engine = AudioEngine.shared
@@ -35,8 +37,8 @@ struct CompactPanel: View {
             footer
         }
         .padding(12)
-        .frame(width: 340)
-        .frame(minHeight: mode == .menuBar ? 420 : 360, maxHeight: mode == .menuBar ? 560 : .infinity)
+        .frame(width: Self.width)
+        .frame(minHeight: mode == .menuBar ? 300 : 360, maxHeight: .infinity)
     }
 
     // MARK: - Parts
