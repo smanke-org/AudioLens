@@ -159,8 +159,18 @@ final class TapPipeline {
         NSLog("AudioLens: tapping \(name) (\(processObjects.count) process\(processObjects.count == 1 ? "" : "es")) → \(names) at \(Int(sampleRate)) Hz, delays \(delays.map(\.delayFrames))")
     }
 
-    func setVolume(_ volume: Double, muted: Bool, trimDB: Double) {
-        for p in processors { p.setVolume(volume, muted: muted, trimDB: trimDB) }
+    /// `trimDB(uid)` is how far that output's own hardware volume carries the level. With a
+    /// stream feed, the Mac's output is compensated after the feed takes its copy.
+    func setVolume(_ volume: Double, muted: Bool, trimDB: (String) -> Double) {
+        for (i, p) in processors.enumerated() {
+            let trim = trimDB(deviceUIDs[i])
+            if i == 0, let feed {
+                p.setVolume(volume, muted: muted, trimDB: 0)
+                feed.macGain = Float(pow(10, -trim / 20))
+            } else {
+                p.setVolume(volume, muted: muted, trimDB: trim)
+            }
+        }
     }
 
     /// Updates the EQ of each output for the current sample rate.
@@ -264,6 +274,13 @@ final class TapPipeline {
                     // Into the multi-room stream as it is; the Mac plays it later, or not at all.
                     feed.ring.write(left: processor.left, right: processor.right, frames: done)
                     delays[k].process(left: processor.left, right: processor.right, frames: done)
+                    let gain = feed.macGain
+                    if gain != 1 {
+                        for i in 0..<done {
+                            processor.left[i] = StereoProcessor.softLimit(processor.left[i] * gain, threshold: 0.891)
+                            processor.right[i] = StereoProcessor.softLimit(processor.right[i] * gain, threshold: 0.891)
+                        }
+                    }
                     write(outputs, range, left: processor.left, right: processor.right, done: feed.playsOnMac ? done : 0)
                     continue
                 }

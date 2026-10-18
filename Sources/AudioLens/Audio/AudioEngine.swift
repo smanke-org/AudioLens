@@ -475,14 +475,15 @@ final class AudioEngine {
         let store = SettingsStore.shared
         let defaultUID = devices.defaultUID
         var desired: Double?
-        if !store.carryLevelInDeviceVolume || defaultUID == nil || activeGroup != nil || store.multiRoom.enabled {
-            // A group's outputs each keep their own volume; carrying a level in one of them
-            // would make that one louder or quieter than the rest.
+        if !store.carryLevelInDeviceVolume || defaultUID == nil {
             desired = 0
-        } else if !pipelines.values.contains(where: { $0.deviceUID == defaultUID }) {
+        } else if !pipelines.values.contains(where: { $0.deviceUIDs.contains(defaultUID!) }) {
             desired = 0
         } else {
-            let audible = running.values.filter { isAudible($0) && outputDevice(for: $0.id)?.uid == defaultUID }
+            // Every app that plays on the system output now, or will once AudioLens quits (a
+            // group's or multi-room's apps). In a group or multi-room only the system output's
+            // part is compensated, so the others keep their own levels.
+            let audible = running.values.filter { isAudible($0) && outputDevices(for: $0.id).contains { $0.uid == defaultUID } }
             if audible.contains(where: { pipelines[$0.id] == nil }) {
                 desired = 0
             } else if !audible.isEmpty {
@@ -495,8 +496,7 @@ final class AudioEngine {
         let trim = desired.map { devices.setTrim($0) } ?? devices.trimDB
         for (id, pipeline) in pipelines {
             let s = store.app(id)
-            let carried = pipeline.deviceUIDs.count == 1 && pipeline.deviceUID == defaultUID
-            pipeline.setVolume(s.volume, muted: s.muted, trimDB: carried ? trim : 0)
+            pipeline.setVolume(s.volume, muted: s.muted, trimDB: { $0 == defaultUID ? trim : 0 })
         }
     }
 
@@ -513,7 +513,7 @@ final class AudioEngine {
             let pipeline = try TapPipeline(
                 appID: app.id, name: app.name, processObjects: objects, devices: devices,
                 volume: s.volume, muted: s.muted,
-                trimDB: devices.count == 1 ? currentTrim(for: devices[0].uid) : 0,
+                trimDB: devices.count == 1 && !streams(app.id) ? currentTrim(for: devices[0].uid) : 0,
                 syncOffsetMs: store.output.syncOffsetMs,
                 feed: streams(app.id) ? MultiRoomStream.shared.feed(for: app.id) : nil,
                 chain: { device, rate in EQChain(settings: store.device(device.uid), sampleRate: rate) },

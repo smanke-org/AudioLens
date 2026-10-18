@@ -63,8 +63,16 @@ public final class MixRing: @unchecked Sendable {
 public final class StreamFeed: @unchecked Sendable {
     public let ring: MixRing
     private let macOutput = Atomic<Bool>(true)
+    private let macGainBits = Atomic<UInt32>(Float(1).bitPattern)
 
     public init(ring: MixRing) { self.ring = ring }
+
+    /// Extra gain for the Mac's own output only (to take back the level the Mac's hardware
+    /// volume carries); the stream gets the app's sound as it is.
+    public var macGain: Float {
+        get { Float(bitPattern: macGainBits.load(ordering: .relaxed)) }
+        set { macGainBits.store(newValue.bitPattern, ordering: .relaxed) }
+    }
 
     public var playsOnMac: Bool {
         get { macOutput.load(ordering: .relaxed) }
