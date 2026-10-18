@@ -30,6 +30,7 @@ final class SettingsStore {
         static let recentApps = "recentApps"
         static let airPlayNames = "airPlayNames"
         static let outputGroup = "outputGroup"
+        static let multiRoom = "multiRoom"
         static let carryLevel = "carryLevelInDeviceVolume"
         static let layout = "windowLayout"
         static let compact = "windowCompact"
@@ -92,6 +93,7 @@ final class SettingsStore {
         deviceVolumes = defaults.dictionary(forKey: Key.deviceVolumes) as? [String: Double] ?? [:]
         airPlayNames = defaults.dictionary(forKey: Key.airPlayNames) as? [String: String] ?? [:]
         output = defaults.data(forKey: Key.outputGroup).flatMap { try? decoder.decode(OutputGroup.self, from: $0) } ?? OutputGroup()
+        multiRoom = defaults.data(forKey: Key.multiRoom).flatMap { try? decoder.decode(MultiRoom.self, from: $0) } ?? MultiRoom()
         recentApps = defaults.data(forKey: Key.recentApps).flatMap { try? decoder.decode([String: RecentApp].self, from: $0) } ?? [:]
         allowBoost = defaults.object(forKey: Key.allowBoost) as? Bool ?? true
         showPinnedWhenSilent = defaults.object(forKey: Key.showPinned) as? Bool ?? true
@@ -262,6 +264,23 @@ final class SettingsStore {
         didSet {
             guard output != oldValue, !loading else { return }
             defaults.set((try? JSONEncoder().encode(output)) ?? Data(), forKey: Key.outputGroup)
+            AudioEngine.shared.groupChanged()
+        }
+    }
+
+    /// Multi-room AirPlay (per Mac): the apps' audio through AudioLens's own player to any
+    /// number of AirPlay speakers, optionally with the Mac's own speakers kept in step.
+    struct MultiRoom: Codable, Equatable {
+        var enabled = false
+        var includeMac = false
+        var syncOffsetMs: Double = 0
+    }
+
+    var multiRoom = MultiRoom() {
+        didSet {
+            guard multiRoom != oldValue, !loading else { return }
+            defaults.set((try? JSONEncoder().encode(multiRoom)) ?? Data(), forKey: Key.multiRoom)
+            MultiRoomStream.shared.apply()
             AudioEngine.shared.groupChanged()
         }
     }

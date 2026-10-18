@@ -264,9 +264,13 @@ private struct AirPlayCompactSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("AirPlay on your network").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-            AirPlaySpeakerRows(compact: true)
-            if browser.unconnected.isEmpty {
+            MultiRoomControls(compact: true)
+            if !SettingsStore.shared.multiRoom.enabled {
+                Divider()
+                Text("One AirPlay speaker for the Mac's sound").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                AirPlaySpeakerRows(compact: true)
+            }
+            if !SettingsStore.shared.multiRoom.enabled, browser.unconnected.isEmpty {
                 Text(browser.denied ? "Allow Local Network access for AudioLens to see AirPlay speakers." : "Looking for AirPlay speakers…")
                     .font(.caption).foregroundStyle(.secondary)
             }

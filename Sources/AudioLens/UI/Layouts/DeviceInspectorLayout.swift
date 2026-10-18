@@ -30,7 +30,7 @@ struct DeviceInspectorLayout: View {
                         .tag(Selection.device(uid))
                     }
                 }
-                ForEach(AirPlayBrowser.shared.groupedForList, id: \.kind) { group in
+                ForEach(SettingsStore.shared.multiRoom.enabled ? [] : AirPlayBrowser.shared.groupedForList, id: \.kind) { group in
                     Section("AirPlay · \(group.kind.title)") {
                         ForEach(group.speakers) { AirPlaySpeakerRow(speaker: $0, compact: true) }
                     }
@@ -165,6 +165,7 @@ struct DeviceInspector: View {
                 DeviceMemoryToggles(uid: uid)
             }
             Section("Several Outputs") { OutputGroupControls() }
+            Section { MultiRoomControls() }
             Section { DeviceEQPanel(uid: uid, graphHeight: 170) }
         }
         .formStyle(.grouped)

@@ -107,8 +107,9 @@ struct DevicesPane: View {
                     LabeledContent("Equalizer", value: s.eqEnabled ? (EQPreset.matching(s.eqGains)?.name ?? "Custom") : "Off").font(.callout)
                 }
             }
-            let groups = AirPlayBrowser.shared.groupedForList
-            Section("AirPlay Speakers") { AirPlayHeaderNote() }
+            Section { MultiRoomControls() }
+            let groups = SettingsStore.shared.multiRoom.enabled ? [] : AirPlayBrowser.shared.groupedForList
+            if !SettingsStore.shared.multiRoom.enabled { Section("AirPlay Speakers") { AirPlayHeaderNote() } }
             ForEach(groups, id: \.kind) { group in
                 Section("AirPlay · \(group.kind.title)") {
                     ForEach(group.speakers) { AirPlaySpeakerRow(speaker: $0) }

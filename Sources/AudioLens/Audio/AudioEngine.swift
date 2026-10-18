@@ -91,6 +91,9 @@ final class AudioEngine {
                     "trimDB": OutputDevices.shared.trimDB,
                     "airplayChecked": AirPlaySpeakers.shared.checked, "airplayError": AirPlaySpeakers.shared.lastError ?? "",
                     "devices": OutputDevices.shared.devices.map(\.name),
+                    "multiRoom": ["running": MultiRoomStream.shared.running, "delay": MultiRoomStream.shared.delay ?? -1,
+                                  "onAirPlay": MultiRoomStream.shared.onAirPlay,
+                                  "streamingApps": engine.pipelines.values.filter { $0.feed != nil }.map(\.appID)] as [String: Any],
                     "hardwareVolume": OutputDevices.volume(of: CA.defaultOutputDevice()) ?? -1,
                 ]
                 if let data = try? JSONSerialization.data(withJSONObject: status, options: [.prettyPrinted, .sortedKeys]) {
@@ -181,8 +184,31 @@ final class AudioEngine {
     func outputDevices(for appID: String) -> [OutputDevice] {
         let devices = OutputDevices.shared
         if let chosen = devices.device(uid: SettingsStore.shared.app(appID).outputUID) { return [chosen] }
+        if SettingsStore.shared.multiRoom.enabled, let mac = macOutput { return [mac] }
         if let group = activeGroup { return group }
         return devices.defaultDevice.map { [$0] } ?? []
+    }
+
+    /// While multi-room is on, the Mac's own output the taps run on (and play to, delayed, if
+    /// the Mac plays along): the system output unless that's AirPlay, then the built-in one.
+    var macOutput: OutputDevice? {
+        let devices = OutputDevices.shared
+        if let d = devices.defaultDevice, d.transport != kAudioDeviceTransportTypeAirPlay { return d }
+        return devices.devices.first { $0.transport == kAudioDeviceTransportTypeBuiltIn }
+            ?? devices.devices.first { $0.transport != kAudioDeviceTransportTypeAirPlay }
+    }
+
+    /// Whether an app's sound goes into the multi-room stream (it isn't sent to a device of its own).
+    func streams(_ appID: String) -> Bool {
+        let store = SettingsStore.shared
+        return store.multiRoom.enabled && !store.app(appID).ignored
+            && OutputDevices.shared.device(uid: store.app(appID).outputUID) == nil
+    }
+
+    /// The multi-room stream's delay changed: the Mac's own output follows it.
+    func streamDelayChanged() {
+        let delay = MultiRoomStream.shared.macDelay
+        for pipeline in pipelines.values { pipeline.setStreamDelay(seconds: delay) }
     }
 
     /// The outputs of the group, when it's on and at least two of them are connected: the
@@ -190,7 +216,7 @@ final class AudioEngine {
     /// without making the others drift).
     var activeGroup: [OutputDevice]? {
         let store = SettingsStore.shared
-        guard store.output.enabled else { return nil }
+        guard store.output.enabled, !store.multiRoom.enabled else { return nil }
         let devices = OutputDevices.shared
         let members = devices.devices.filter { store.output.members.contains(store.memoryKey($0.uid)) }
         guard members.count >= 2 else { return nil }
@@ -376,8 +402,9 @@ final class AudioEngine {
         let s = SettingsStore.shared.app(appID)
         guard !s.ignored else { return false }
         if s.changesSound { return true }
-        // A group plays everything through AudioLens: only a tap can reach several outputs.
-        if activeGroup != nil { return true }
+        // A group or multi-room plays everything through AudioLens: only a tap can reach
+        // several outputs.
+        if activeGroup != nil || SettingsStore.shared.multiRoom.enabled { return true }
         guard let device = outputDevice(for: appID) else { return false }
         return SettingsStore.shared.device(device.uid).processesSound
     }
@@ -413,7 +440,7 @@ final class AudioEngine {
             if let pipeline = pipelines[app.id] {
                 // Rebuild when the outputs changed, or a process that isn't in the tap started playing.
                 let missing = app.playingObjects.contains { !pipeline.processObjects.contains($0) }
-                let moved = pipeline.deviceUIDs != targets.map(\.uid)
+                let moved = pipeline.deviceUIDs != targets.map(\.uid) || (pipeline.feed != nil) != streams(app.id)
                 guard moved || missing else { continue }
                 remove(app.id, reason: moved ? "output changed" : "new process")
             } else if !app.isPlaying && !SettingsStore.shared.app(app.id).changesSound {
@@ -448,7 +475,7 @@ final class AudioEngine {
         let store = SettingsStore.shared
         let defaultUID = devices.defaultUID
         var desired: Double?
-        if !store.carryLevelInDeviceVolume || defaultUID == nil || activeGroup != nil {
+        if !store.carryLevelInDeviceVolume || defaultUID == nil || activeGroup != nil || store.multiRoom.enabled {
             // A group's outputs each keep their own volume; carrying a level in one of them
             // would make that one louder or quieter than the rest.
             desired = 0
@@ -488,9 +515,11 @@ final class AudioEngine {
                 volume: s.volume, muted: s.muted,
                 trimDB: devices.count == 1 ? currentTrim(for: devices[0].uid) : 0,
                 syncOffsetMs: store.output.syncOffsetMs,
+                feed: streams(app.id) ? MultiRoomStream.shared.feed(for: app.id) : nil,
                 chain: { device, rate in EQChain(settings: store.device(device.uid), sampleRate: rate) },
                 onRateChange: { AudioEngine.shared.rebuild(app.id) })
             pipelines[app.id] = pipeline
+            pipeline.setStreamDelay(seconds: MultiRoomStream.shared.macDelay)
             failures[app.id] = nil
         } catch {
             failures[app.id] = error.localizedDescription
@@ -506,6 +535,7 @@ final class AudioEngine {
     private func remove(_ id: String, reason: String) {
         guard let pipeline = pipelines.removeValue(forKey: id) else { return }
         pipeline.stop()
+        if pipeline.feed != nil { MultiRoomStream.shared.removeFeed(id) }
         teardownAfter[id] = nil
         NSLog("AudioLens: stopped tapping \(id) (\(reason))")
     }

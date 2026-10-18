@@ -26,6 +26,9 @@ final class TapPipeline {
     /// For meters: the first output's processor.
     var processor: StereoProcessor { processors[0] }
     private let delays: [DelayLine]
+    /// Set when the app plays through the multi-room stream: its sound goes to the stream's
+    /// ring, and to the Mac's output only if the user wants it there (delayed to match).
+    let feed: StreamFeed?
     private let latencies: [Int]
     private(set) var sampleRate: Double = 48000
 
@@ -47,14 +50,15 @@ final class TapPipeline {
     }
 
     init(appID: String, name: String, processObjects: [AudioObjectID], devices: [OutputDevice],
-         volume: Double, muted: Bool, trimDB: Double, syncOffsetMs: Double,
+         volume: Double, muted: Bool, trimDB: Double, syncOffsetMs: Double, feed: StreamFeed? = nil,
          chain: (OutputDevice, Double) -> EQChain, onRateChange: @escaping @MainActor () -> Void) throws {
         precondition(!devices.isEmpty)
         self.appID = appID
+        self.feed = feed
         self.processObjects = processObjects
         self.deviceUIDs = devices.map(\.uid)
         processors = devices.map { _ in StereoProcessor() }
-        delays = devices.map { _ in DelayLine(maxSeconds: 4) }
+        delays = devices.map { _ in DelayLine(maxSeconds: 12) }
         latencies = devices.map { Self.outputLatency($0.objectID) }
         for p in processors { p.setVolume(volume, muted: muted, trimDB: trimDB) }
 
@@ -131,7 +135,7 @@ final class TapPipeline {
         // 3. The IOProc, on Core Audio's real-time thread.
         var proc: AudioDeviceIOProcID?
         let procStatus = AudioDeviceCreateIOProcIDWithBlock(&proc, aggregate, nil,
-                                                            Self.ioBlock(processors: processors, delays: delays, ranges: ranges))
+                                                            Self.ioBlock(processors: processors, delays: delays, ranges: ranges, feed: feed))
         guard procStatus == noErr, let proc else {
             destroy()
             throw PipelineError.ioProc(procStatus)
@@ -162,6 +166,12 @@ final class TapPipeline {
     /// Updates the EQ of each output for the current sample rate.
     func setChain(_ chain: (String, Double) -> EQChain) {
         for (i, uid) in deviceUIDs.enumerated() { processors[i].setChain(chain(uid, sampleRate)) }
+    }
+
+    /// Holds the Mac's own output back by the multi-room stream's delay.
+    func setStreamDelay(seconds: Double) {
+        guard feed != nil else { return }
+        delays[0].delayFrames = Int(seconds * sampleRate)
     }
 
     /// Re-aligns the outputs with the user's fine-tuning, without rebuilding.
@@ -225,7 +235,8 @@ final class TapPipeline {
 
     /// The real-time render block. It reads the last input buffer (the tap), and for each
     /// output device processes it, delays it, and writes it in whatever layout that device uses.
-    nonisolated private static func ioBlock(processors: [StereoProcessor], delays: [DelayLine], ranges: [Range<Int>]) -> AudioDeviceIOBlock {
+    nonisolated private static func ioBlock(processors: [StereoProcessor], delays: [DelayLine], ranges: [Range<Int>],
+                                            feed: StreamFeed?) -> AudioDeviceIOBlock {
         return { _, inputData, _, outputData, _ in
             let inputs = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: inputData))
             let outputs = UnsafeMutableAudioBufferListPointer(outputData)
@@ -249,6 +260,13 @@ final class TapPipeline {
             for (k, range) in ranges.enumerated() where k < processors.count && range.upperBound <= outputs.count {
                 let processor = processors[k]
                 let done = processor.process(interleaved: source, channels: sourceChannels, frames: frames)
+                if k == 0, let feed {
+                    // Into the multi-room stream as it is; the Mac plays it later, or not at all.
+                    feed.ring.write(left: processor.left, right: processor.right, frames: done)
+                    delays[k].process(left: processor.left, right: processor.right, frames: done)
+                    write(outputs, range, left: processor.left, right: processor.right, done: feed.playsOnMac ? done : 0)
+                    continue
+                }
                 delays[k].process(left: processor.left, right: processor.right, frames: done)
                 write(outputs, range, left: processor.left, right: processor.right, done: done)
             }

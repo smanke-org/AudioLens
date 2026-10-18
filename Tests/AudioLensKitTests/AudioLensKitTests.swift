@@ -198,3 +198,24 @@ import Testing
         #expect(DelayLine.alignment(latencies: [700, 24000], extra: -480) == [22820, 480])
     }
 }
+
+@Suite struct MixRingTests {
+    @Test func mixesWhatWasWritten() {
+        let ring = MixRing(seconds: 0.01, sampleRate: 48000)
+        let l: [Float] = [0.1, 0.2, 0.3], r: [Float] = [0.4, 0.5, 0.6]
+        l.withUnsafeBufferPointer { lp in r.withUnsafeBufferPointer { rp in ring.write(left: lp.baseAddress!, right: rp.baseAddress!, frames: 3) } }
+        #expect(ring.available == 3)
+        var out = [Float](repeating: 1, count: 8)
+        let n = out.withUnsafeMutableBufferPointer { ring.mix(into: $0.baseAddress!, frames: 4) }
+        #expect(n == 3)
+        #expect(abs(out[0] - 1.1) < 1e-6 && abs(out[5] - 1.6) < 1e-6 && out[6] == 1)
+        #expect(ring.available == 0)
+    }
+
+    @Test func aReaderFarBehindSkipsTheOldest() {
+        let ring = MixRing(seconds: 4.0 / 48000 * 16, sampleRate: 48000) // capacity 64 (the minimum)
+        let ones = [Float](repeating: 1, count: 100)
+        ones.withUnsafeBufferPointer { ring.write(left: $0.baseAddress!, right: $0.baseAddress!, frames: 100) }
+        #expect(ring.available == ring.capacity)
+    }
+}

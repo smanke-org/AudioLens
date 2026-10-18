@@ -25,6 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         _ = CapturePermission.shared
         OutputDevices.shared.start()
         AudioEngine.shared.start()
+        MultiRoomStream.shared.apply()
         HotKeys.shared.apply()
 
         setUpStatusItem()
@@ -36,6 +37,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if DebugHooks.run() { return }
         #endif
 
+        if let file = ProcessInfo.processInfo.environment["AUDIOLENS_AIRPLAY_LAB"] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { AirPlayLab.shared.show(file: file) }
+        }
         // Testing: AUDIOLENS_AIRPLAY_SELECT="Bathroom" (or "-" for off, "?" to just read).
         if let name = ProcessInfo.processInfo.environment["AUDIOLENS_AIRPLAY_SELECT"] {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
