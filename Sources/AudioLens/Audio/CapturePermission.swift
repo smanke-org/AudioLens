@@ -18,10 +18,11 @@ final class CapturePermission {
     enum Status { case unknown, authorized, denied }
 
     private(set) var status: Status = .unknown
+    @ObservationIgnored private var lastRaw = Int.min
     var isAuthorized: Bool { status == .authorized }
 
     private init() {
-        refresh()
+        refresh(notify: false)
         NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in
             MainActor.assumeIsolated { CapturePermission.shared.refresh() }
         }
@@ -33,16 +34,26 @@ final class CapturePermission {
         }
     }
 
-    func refresh() {
+    /// `notify` is off while `shared` is being created: the engine reads `shared` back, which
+    /// would deadlock inside its one-time initializer. The engine looks at the status when it starts.
+    func refresh(notify: Bool = true) {
         let before = status
-        switch TCC.preflight() {
+        // Testing only: act as if allowed, to see whether taps carry audio.
+        if ProcessInfo.processInfo.environment["AUDIOLENS_ASSUME_PERMISSION"] != nil {
+            status = .authorized
+            if before != .authorized, notify { AudioEngine.shared.permissionChanged() }
+            return
+        }
+        let raw = TCC.preflight()
+        if raw != lastRaw { NSLog("AudioLens: TCC preflight returned \(raw)"); lastRaw = raw }
+        switch raw {
         case 0: status = .authorized
         case 1: status = .denied
         default: status = .unknown
         }
         if status != before {
             NSLog("AudioLens: audio capture permission \(status)")
-            if status == .authorized { AudioEngine.shared.permissionChanged() }
+            if status == .authorized, notify { AudioEngine.shared.permissionChanged() }
         }
     }
 

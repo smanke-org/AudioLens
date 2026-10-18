@@ -73,14 +73,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
-    /// `audiolens://show`, `audiolens://compact`, `audiolens://settings`, for Shortcuts and scripts.
+    /// For Shortcuts, scripts and our other apps:
+    ///
+    ///     audiolens://show                        the window
+    ///     audiolens://compact                     the compact panel
+    ///     audiolens://settings                    Settings
+    ///     audiolens://volume?app=<bundle id>&value=<0–150>
+    ///     audiolens://mute?app=<bundle id>&on=<1|0>   (no "on" toggles)
+    ///     audiolens://eq?device=<UID|default>&preset=<name>&on=<1|0>
+    ///
+    /// `app` may also be `playing`, the app the hotkeys act on.
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls where url.scheme == "audiolens" {
+            let query = Dictionary(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
+                .compactMap { item in item.value.map { (item.name, $0) } } ?? [], uniquingKeysWith: { _, b in b })
             switch url.host {
             case "compact": MainWindow.shared.show(compact: true)
             case "settings": SettingsWindow.shared.show()
+            case "volume", "mute": adjustApp(url.host!, query)
+            case "eq": adjustEQ(query)
             default: MainWindow.shared.show()
             }
+        }
+    }
+
+    private func targetApp(_ query: [String: String]) -> (id: String, name: String?)? {
+        guard let key = query["app"] else { return nil }
+        if key == "playing" { return AudioEngine.shared.hotKeyTarget.map { ($0.id, $0.name) } }
+        let running = AudioEngine.shared.running.values.first { $0.id == key || $0.bundleID == key || $0.name == key }
+        return (running?.id ?? key, running?.name)
+    }
+
+    private func adjustApp(_ action: String, _ query: [String: String]) {
+        guard let (id, name) = targetApp(query) else { return NSSound.beep() }
+        let store = SettingsStore.shared
+        store.updateApp(id) { s in
+            if s.name == nil { s.name = name }
+            if action == "volume", let value = query["value"].flatMap(Double.init) {
+                s.volume = min(max(value / 100, 0), store.maxVolume)
+                if value > 0 { s.muted = false }
+            } else if action == "mute" {
+                s.muted = query["on"].map { $0 == "1" || $0 == "true" } ?? !s.muted
+            }
+        }
+    }
+
+    private func adjustEQ(_ query: [String: String]) {
+        let devices = OutputDevices.shared
+        guard let uid = query["device"].flatMap({ $0 == "default" ? devices.defaultUID : $0 }) ?? devices.defaultUID else { return }
+        SettingsStore.shared.updateDevice(uid) { s in
+            if let name = query["preset"], let preset = EQPreset.all.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) {
+                s.eqGains = preset.gains
+                s.eqEnabled = true
+            }
+            if let on = query["on"] { s.eqEnabled = on == "1" || on == "true" }
         }
     }
 

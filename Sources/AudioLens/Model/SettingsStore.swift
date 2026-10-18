@@ -92,7 +92,7 @@ final class SettingsStore {
         let encoder = JSONEncoder()
         func data<T: Encodable>(_ v: T) -> Data { (try? encoder.encode(v)) ?? Data() }
         return [
-            Key.apps: data(apps), Key.devices: data(devices), Key.allowBoost: allowBoost,
+            Key.apps: data(apps.filter { !$0.key.hasPrefix("pid:") }), Key.devices: data(devices), Key.allowBoost: allowBoost,
             Key.showPinned: showPinnedWhenSilent, Key.showMeters: showMeters, Key.volumeStep: volumeStep,
             Key.hotKeyUp: hotKeyUp.map(data) ?? Data(), Key.hotKeyDown: hotKeyDown.map(data) ?? Data(),
             Key.hotKeyMute: hotKeyMute.map(data) ?? Data(),
@@ -115,7 +115,10 @@ final class SettingsStore {
     }
 
     private func saveApps() {
-        defaults.set((try? JSONEncoder().encode(apps)) ?? Data(), forKey: Key.apps)
+        // Tools without a bundle identifier are known only by a process number that changes
+        // every run, so their settings last only as long as the process.
+        let lasting = apps.filter { !$0.key.hasPrefix("pid:") }
+        defaults.set((try? JSONEncoder().encode(lasting)) ?? Data(), forKey: Key.apps)
         if !loading { SettingsSync.shared.localDidChange() }
     }
 

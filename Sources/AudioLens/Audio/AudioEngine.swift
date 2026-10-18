@@ -66,6 +66,33 @@ final class AudioEngine {
             MainActor.assumeIsolated { AudioEngine.shared.refresh() }
         }
         refresh()
+        startStatusFile()
+    }
+
+    /// For testing: with AUDIOLENS_STATUS_FILE set, writes what the engine is doing there twice
+    /// a second (permission, tapped apps and their peak levels, failures).
+    private func startStatusFile() {
+        guard let path = ProcessInfo.processInfo.environment["AUDIOLENS_STATUS_FILE"] else { return }
+        Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
+            MainActor.assumeIsolated {
+                let engine = AudioEngine.shared
+                var taps: [String: Any] = [:]
+                for (id, pipeline) in engine.pipelines {
+                    taps[id] = ["device": pipeline.deviceUID, "peak": Double(pipeline.processor.takePeak()),
+                                "sampleRate": pipeline.sampleRate, "processes": pipeline.processObjects.count]
+                }
+                let status: [String: Any] = [
+                    "permission": "\(CapturePermission.shared.status)",
+                    "waitingForPermission": engine.waitingForPermission,
+                    "playing": engine.running.values.filter(\.isPlaying).map(\.id),
+                    "taps": taps, "failures": engine.failures,
+                    "output": OutputDevices.shared.defaultUID ?? "", "outputVolume": OutputDevices.shared.volume ?? -1,
+                ]
+                if let data = try? JSONSerialization.data(withJSONObject: status, options: [.prettyPrinted, .sortedKeys]) {
+                    try? data.write(to: URL(fileURLWithPath: path), options: .atomic)
+                }
+            }
+        }
     }
 
     /// Stops every tap, so each app plays straight to its device again.

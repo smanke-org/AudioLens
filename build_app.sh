@@ -40,11 +40,17 @@ fi
 echo "    using $BIN_DIR"
 
 echo "==> Assembling bundle"
-rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN_DIR/$APP_NAME" "$APP/Contents/MacOS/$APP_NAME"
-cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
-[ -f "$ROOT/Resources/AppIcon.icns" ] && cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
+# Assembled beside the app, then copied over it in place: deleting and recreating the bundle
+# orphans its System Audio Recording permission, even with the same signature.
+STAGE="$BUILD/stage/$APP_NAME.app"
+rm -rf "$BUILD/stage"
+mkdir -p "$STAGE/Contents/MacOS" "$STAGE/Contents/Resources"
+cp "$BIN_DIR/$APP_NAME" "$STAGE/Contents/MacOS/$APP_NAME"
+cp "$ROOT/Resources/Info.plist" "$STAGE/Contents/Info.plist"
+[ -f "$ROOT/Resources/AppIcon.icns" ] && cp "$ROOT/Resources/AppIcon.icns" "$STAGE/Contents/Resources/AppIcon.icns"
+mkdir -p "$APP"
+rsync -a --delete "$STAGE/" "$APP/"
+rm -rf "$BUILD/stage"
 
 VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist")
 
