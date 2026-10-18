@@ -15,7 +15,7 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.0</string>
+	<string>1.0.1</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -28,21 +28,21 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>1.0.0</string>
+	<string>1.0.1</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.utilities</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>26.0</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>AudioLens changes each app's volume and applies your EQ by passing the app's sound through itself. The sound stays on your Mac and is never recorded.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_airplay._tcp</string>
 		<string>_raop._tcp</string>
 	</array>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>AudioLens looks for HomePods, Apple TVs and other AirPlay speakers on your network so you can connect them.</string>
-	<key>NSAudioCaptureUsageDescription</key>
-	<string>AudioLens changes each app's volume and applies your EQ by passing the app's sound through itself. The sound stays on your Mac and is never recorded.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2026 Steve Manke</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>AudioLens looks for HomePods, Apple TVs and other AirPlay speakers on your network so you can connect them.</string>
 </dict>
 </plist>
