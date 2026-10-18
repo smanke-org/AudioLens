@@ -135,7 +135,7 @@ struct EqualizerPane: View {
         Form {
             Section {
                 Picker("Device", selection: Binding(get: { uid ?? "" }, set: { chosen = $0 })) {
-                    ForEach(knownDeviceUIDs(), id: \.self) { id in
+                    ForEach(knownDeviceUIDs(includeAirPlay: true), id: \.self) { id in
                         Text(devices.device(uid: id)?.name ?? SettingsStore.shared.device(id).name ?? id).tag(id)
                     }
                 }

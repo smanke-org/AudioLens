@@ -1,4 +1,5 @@
 import AudioLensKit
+import CoreAudio
 import SwiftUI
 
 /// A device's volume slider: the live level when connected, the remembered level otherwise.
@@ -90,9 +91,13 @@ struct DeviceSummary: View {
 
 /// Every device worth showing: the connected ones, then remembered ones that aren't connected.
 @MainActor
-func knownDeviceUIDs() -> [String] {
+/// AirPlay speakers are left out unless asked for: they're chosen in the AirPlay section,
+/// not as ordinary devices.
+func knownDeviceUIDs(includeAirPlay: Bool = false) -> [String] {
     let store = SettingsStore.shared
-    let connected = OutputDevices.shared.devices.map(\.uid)
+    let connected = OutputDevices.shared.devices
+        .filter { includeAirPlay || $0.transport != kAudioDeviceTransportTypeAirPlay }
+        .map(\.uid)
     let connectedKeys = Set(connected.map(store.memoryKey))
     // AirPlay speakers have their own checkboxes; their memories aren't devices to reconnect.
     // (Older versions saved them under their changing UIDs; the airPlay flag catches those.)
