@@ -123,6 +123,7 @@ struct CompactPanel: View {
     private var devicesTab: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
+                AirPlayCompactSection()
                 ForEach(knownDeviceUIDs(), id: \.self) { uid in
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
@@ -130,7 +131,7 @@ struct CompactPanel: View {
                             if devices.device(uid: uid) != nil, uid != devices.defaultUID {
                                 Button("Use") { devices.makeDefault(uid) }.controlSize(.small)
                             } else if devices.device(uid: uid) == nil, store.device(uid).airPlay {
-                                AirPlayConnectButton()
+                                AirPlayConnectButton(name: store.device(uid).name)
                             }
                         }
                         DeviceVolumeSlider(uid: uid)
@@ -250,5 +251,23 @@ struct PanelAppRow: View {
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.primary.opacity(expanded ? 0.1 : 0)))
         .opacity(engine.isAudible(app) ? 1 : 0.65)
         .contextMenu { AppContextMenu(app: app) }
+    }
+}
+
+/// AirPlay speakers on the network, at the top of the compact Devices tab.
+private struct AirPlayCompactSection: View {
+    @State private var browser = AirPlayBrowser.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("AirPlay on your network").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            AirPlaySpeakerRows(compact: true)
+            if browser.unconnected.isEmpty {
+                Text(browser.denied ? "Allow Local Network access for AudioLens to see AirPlay speakers." : "Looking for AirPlay speakers…")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .padding(10)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }

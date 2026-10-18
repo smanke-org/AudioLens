@@ -33,6 +33,13 @@
 	<string>public.app-category.utilities</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>26.0</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_airplay._tcp</string>
+		<string>_raop._tcp</string>
+	</array>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>AudioLens looks for HomePods, Apple TVs and other AirPlay speakers on your network so you can connect them.</string>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>AudioLens changes each app's volume and applies your EQ by passing the app's sound through itself. The sound stays on your Mac and is never recorded.</string>
 	<key>NSHumanReadableCopyright</key>

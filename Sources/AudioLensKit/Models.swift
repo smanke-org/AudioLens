@@ -182,7 +182,17 @@ public enum WindowLayout: String, CaseIterable, Codable, Sendable, Identifiable 
         case .sourceList: (880, 560)
         case .mixingDesk: (920, 540)
         case .dialBoard: (900, 600)
-        case .deviceInspector: (980, 600)
+        case .deviceInspector: (1200, 640)
+        }
+    }
+
+    /// The narrowest the window can be and still fit the layout without clipping.
+    public var minimumWidth: Double {
+        switch self {
+        case .sourceList: 760
+        case .mixingDesk: 640
+        case .dialBoard: 640
+        case .deviceInspector: 1120
         }
     }
 

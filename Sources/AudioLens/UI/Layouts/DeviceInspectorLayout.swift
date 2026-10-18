@@ -22,9 +22,6 @@ struct DeviceInspectorLayout: View {
     var body: some View {
         NavigationSplitView {
             List(selection: Binding(get: { current }, set: { selection = $0 })) {
-                Section {
-                    LabeledContent("AirPlay") { AirPlayIcon() }
-                }
                 Section("Output Devices") {
                     ForEach(knownDeviceUIDs(), id: \.self) { uid in
                         HStack {
@@ -33,32 +30,45 @@ struct DeviceInspectorLayout: View {
                         .tag(Selection.device(uid))
                     }
                 }
+                Section("AirPlay on Your Network") {
+                    AirPlaySpeakerRows(compact: true)
+                }
                 Section("Apps") {
                     Label("All Playing Apps", systemImage: "square.grid.2x2").badge(engine.visibleApps.count).tag(Selection.allApps)
                     Label("Pinned", systemImage: "pin").badge(store.apps.values.filter(\.pinned).count).tag(Selection.pinned)
                     Label("Ignored", systemImage: "eye.slash").badge(store.apps.values.filter(\.ignored).count).tag(Selection.ignored)
                 }
             }
-            .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 300)
+            .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 270)
             .safeAreaInset(edge: .bottom) {
-                SyncStatusLabel().frame(maxWidth: .infinity, alignment: .leading).padding(12)
+                SyncStatusLabel().frame(maxWidth: .infinity, alignment: .leading).padding(12).background(.bar)
             }
-        } content: {
-            Group {
-                switch current {
-                case .device(let uid): appsFor(uid: uid)
-                case .allApps: AppsList(showRoute: true)
-                case .pinned: PinnedPane()
-                case .ignored: IgnoredPane()
-                }
-            }
-            .navigationSplitViewColumnWidth(min: 340, ideal: 380)
         } detail: {
-            if let uid = inspectedUID {
-                DeviceInspector(uid: uid)
-            } else {
-                Text("No output device").foregroundStyle(.secondary)
+            // Two panes side by side in the detail column rather than a three-column split
+            // view, which laid itself out wider than the window and clipped both edges.
+            HStack(spacing: 0) {
+                Group {
+                    switch current {
+                    case .device(let uid): appsFor(uid: uid)
+                    case .allApps: AppsList(showRoute: true)
+                    case .pinned: PinnedPane()
+                    case .ignored: IgnoredPane()
+                    }
+                }
+                .frame(minWidth: 0, maxWidth: .infinity)
+                .clipped()
+                Divider()
+                Group {
+                    if let uid = inspectedUID {
+                        DeviceInspector(uid: uid)
+                    } else {
+                        Text("No output device").foregroundStyle(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
+                .frame(width: 400)
+                .clipped()
             }
+            .frame(minWidth: 0, maxWidth: .infinity)
         }
         .navigationTitle(devices.device(uid: inspectedUID)?.name ?? "AudioLens")
     }
@@ -105,7 +115,7 @@ struct CompactAppRow: View {
                     Text(app.name).lineLimit(1)
                     Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
-                .frame(width: 118, alignment: .leading)
+                .frame(minWidth: 60, idealWidth: 118, maxWidth: 150, alignment: .leading)
                 PlayingIndicator(playing: engine.isAudible(app) && !store.app(app.id).muted)
                 AppVolumeSlider(app: app)
                 VolumeText(app: app)
@@ -144,7 +154,7 @@ struct DeviceInspector: View {
                     if device != nil, uid != devices.defaultUID {
                         Button("Use as Output") { devices.makeDefault(uid) }.controlSize(.small)
                     } else if device == nil, SettingsStore.shared.device(uid).airPlay {
-                        AirPlayConnectButton()
+                        AirPlayConnectButton(name: SettingsStore.shared.device(uid).name)
                     }
                 }
             }
@@ -155,7 +165,6 @@ struct DeviceInspector: View {
             Section { DeviceEQPanel(uid: uid, graphHeight: 170) }
         }
         .formStyle(.grouped)
-        .frame(minWidth: 330)
     }
 
     private func details(_ device: OutputDevice?) -> String {

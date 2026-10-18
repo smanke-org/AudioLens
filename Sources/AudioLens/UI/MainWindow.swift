@@ -10,6 +10,9 @@ final class MainWindow: NSObject, NSWindowDelegate {
 
     private var window: NSWindow?
     private var store: SettingsStore { .shared }
+    /// While the window moves to another mode's frame, its move and resize events are that
+    /// animation, not the user: saving them stored the old layout's size under the new name.
+    private var applyingFrame = false
     private static let floatKey = "compactFloats"
 
     var isVisible: Bool { window?.isVisible == true }
@@ -29,6 +32,7 @@ final class MainWindow: NSObject, NSWindowDelegate {
             store.compact = compact
         }
         if window == nil { makeWindow() }
+        AirPlayBrowser.shared.start()
         applyMode()
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
@@ -62,6 +66,9 @@ final class MainWindow: NSObject, NSWindowDelegate {
         window.title = "AudioLens"
         window.toolbarStyle = .unified
         window.tabbingMode = .disallowed
+        // AudioLens keeps a frame per layout itself. macOS's own window restoration put back
+        // whatever size the window last had, a moment after launch, over the layout's frame.
+        window.isRestorable = false
         self.window = window
     }
 
@@ -78,10 +85,14 @@ final class MainWindow: NSObject, NSWindowDelegate {
             window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
             window.titlebarAppearsTransparent = false
             window.titleVisibility = .visible
-            window.contentMinSize = NSSize(width: 640, height: 420)
+            window.contentMinSize = NSSize(width: store.layout.minimumWidth, height: 420)
             window.contentMaxSize = NSSize(width: 10000, height: 10000)
         }
-        window.setFrame(frame(for: compact), display: true, animate: window.isVisible)
+        applyingFrame = true
+        let animate = window.isVisible
+        let target = frame(for: compact)
+        window.setFrame(target, display: true, animate: animate)
+        DispatchQueue.main.asyncAfter(deadline: .now() + (animate ? 0.6 : 0.05)) { [weak self] in self?.applyingFrame = false }
         applyLevel()
     }
 
@@ -94,7 +105,7 @@ final class MainWindow: NSObject, NSWindowDelegate {
     private var frameKey: String { store.compact ? "frame.compact" : "frame.\(store.layout.rawValue)" }
 
     private func saveFrame() {
-        guard let window, window.isVisible else { return }
+        guard let window, window.isVisible, !applyingFrame else { return }
         UserDefaults.standard.set(NSStringFromRect(window.frame), forKey: frameKey)
     }
 
@@ -102,7 +113,9 @@ final class MainWindow: NSObject, NSWindowDelegate {
     /// placed where the window is now (compact keeps the top-right corner, like a panel).
     private func frame(for compact: Bool) -> NSRect {
         if let saved = UserDefaults.standard.string(forKey: frameKey) {
-            let rect = NSRectFromString(saved)
+            var rect = NSRectFromString(saved)
+            // Never narrower than the layout needs (an older build saved too-small frames).
+            if !compact { rect.size.width = max(rect.width, store.layout.minimumWidth) }
             if rect.width > 100, NSScreen.screens.contains(where: { $0.visibleFrame.intersects(rect) }) { return rect }
         }
         let screen = window?.screen ?? NSScreen.main
@@ -123,6 +136,22 @@ final class MainWindow: NSObject, NSWindowDelegate {
         origin.x = min(max(origin.x, visible.minX), visible.maxX - content.width)
         origin.y = min(max(origin.y, visible.minY), visible.maxY - content.height)
         return NSRect(origin: origin, size: content)
+    }
+
+    /// Another app (a window manager, say) can resize the window through Accessibility, past
+    /// the minimum AppKit enforces for the user. A layout squeezed below its width clips, so
+    /// it's widened back.
+    func windowDidResize(_ notification: Notification) {
+        guard let window, !applyingFrame, !store.compact else { return }
+        let minimum = store.layout.minimumWidth
+        let content = window.contentRect(forFrameRect: window.frame)
+        guard content.width < minimum - 1 else { return }
+        DispatchQueue.main.async {
+            var frame = window.frame
+            frame.size.width += minimum - content.width
+            if let visible = window.screen?.visibleFrame, frame.maxX > visible.maxX { frame.origin.x = max(visible.minX, visible.maxX - frame.width) }
+            window.setFrame(frame, display: true)
+        }
     }
 
     func windowDidMove(_ notification: Notification) { saveFrame() }

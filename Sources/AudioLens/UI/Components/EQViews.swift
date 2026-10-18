@@ -188,14 +188,19 @@ struct CorrectionControls: View {
                 Spacer()
                 if correction != nil { Toggle("", isOn: DeviceEQBindings(uid: uid).correctionEnabled).labelsHidden().toggleStyle(.switch).controlSize(.small) }
             }
-            HStack {
-                Button(correction == nil ? "Choose Headphones…" : "Change…") { choosing = true }
-                Button("Import File…") { CorrectionCatalog.shared.importFile(for: uid) }
-                if correction != nil { Button("Remove") { store.updateDevice(uid) { $0.correction = nil } } }
+            ViewThatFits(in: .horizontal) {
+                HStack { correctionButtons(correction) }
+                VStack(alignment: .leading, spacing: 6) { correctionButtons(correction) }
             }
             .controlSize(.small)
         }
         .sheet(isPresented: $choosing) { HeadphonePicker(uid: uid, isPresented: $choosing) }
+    }
+
+    @ViewBuilder private func correctionButtons(_ correction: HeadphoneCorrection?) -> some View {
+        Button(correction == nil ? "Choose Headphones…" : "Change…") { choosing = true }
+        Button("Import File…") { CorrectionCatalog.shared.importFile(for: uid) }
+        if correction != nil { Button("Remove") { store.updateDevice(uid) { $0.correction = nil } } }
     }
 }
 

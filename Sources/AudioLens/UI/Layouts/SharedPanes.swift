@@ -85,14 +85,6 @@ struct DevicesPane: View {
 
     var body: some View {
         Form {
-            Section {
-                LabeledContent {
-                    AirPlayIcon()
-                } label: {
-                    Text("AirPlay speakers")
-                    Text("HomePods, Apple TVs and other AirPlay speakers appear here once you've connected them. Use the AirPlay button to connect one.")
-                }
-            }
             ForEach(knownDeviceUIDs(), id: \.self) { uid in
                 Section {
                     HStack {
@@ -101,7 +93,7 @@ struct DevicesPane: View {
                             Button("Use as Output") { devices.makeDefault(uid) }.controlSize(.small)
                         }
                         if devices.device(uid: uid) == nil {
-                            if store.device(uid).airPlay { AirPlayConnectButton() }
+                            if store.device(uid).airPlay { AirPlayConnectButton(name: store.device(uid).name) }
                             Button("Forget") { store.forgetDevice(uid) }.controlSize(.small)
                         }
                     }
@@ -113,6 +105,14 @@ struct DevicesPane: View {
                     let s = store.device(uid)
                     LabeledContent("Equalizer", value: s.eqEnabled ? (EQPreset.matching(s.eqGains)?.name ?? "Custom") : "Off").font(.callout)
                 }
+            }
+            Section {
+                AirPlaySpeakerRows()
+            } header: {
+                Text("AirPlay Speakers on Your Network")
+            } footer: {
+                Text("Connect opens Sound settings, where one click makes the speaker your Mac's output; macOS doesn't let other apps connect AirPlay speakers themselves. Once connected, AudioLens remembers its volume and EQ.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section {
             } footer: {

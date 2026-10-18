@@ -42,7 +42,7 @@ struct SourceListLayout: View {
             }
             .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 260)
             .safeAreaInset(edge: .bottom) {
-                SyncStatusLabel().frame(maxWidth: .infinity, alignment: .leading).padding(12)
+                SyncStatusLabel().frame(maxWidth: .infinity, alignment: .leading).padding(12).background(.bar)
             }
         } detail: {
             VStack(spacing: 0) {

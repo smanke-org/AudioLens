@@ -279,6 +279,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return p
         }()
         self.popover = popover
+        AirPlayBrowser.shared.start()
         let room = (sender.window?.screen ?? NSScreen.main)?.visibleFrame.height ?? 800
         popover.contentSize = NSSize(width: CompactPanel.width, height: min(560, max(room - 30, 300)))
         NSApp.activate(ignoringOtherApps: true)

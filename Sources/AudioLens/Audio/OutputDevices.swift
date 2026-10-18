@@ -112,6 +112,9 @@ final class OutputDevices {
             return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
         }
         if list != devices {
+            if list.contains(where: { d in d.transport == kAudioDeviceTransportTypeAirPlay && !devices.contains { $0.uid == d.uid } }) {
+                ConnectHint.shared.dismiss()
+            }
             devices = list
             // Remember names, so settings for a disconnected device still read well.
             for device in list {
