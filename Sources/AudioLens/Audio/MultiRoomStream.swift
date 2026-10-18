@@ -27,6 +27,10 @@ final class MultiRoomStream {
     private(set) var delay: Double?
 
     @ObservationIgnored private let core = StreamCore()
+    /// Keeps AirPlay discovery running while multi-room is on. Without it, discovery starts
+    /// when the picker opens and speakers arrive one by one, reshuffling the list under the
+    /// pointer (and a click lands on the wrong speaker).
+    @ObservationIgnored private let routeDetector = AVRouteDetector()
     @ObservationIgnored private var feeds: [String: StreamFeed] = [:]
     @ObservationIgnored private var meter: Timer?
 
@@ -62,6 +66,7 @@ final class MultiRoomStream {
         player.replaceCurrentItem(with: AVPlayerItem(asset: asset))
         player.automaticallyWaitsToMinimizeStalling = false
         player.play()
+        routeDetector.isRouteDetectionEnabled = true
         routeMayChange()
         meter = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
             MainActor.assumeIsolated { MultiRoomStream.shared.measure() }
@@ -73,6 +78,7 @@ final class MultiRoomStream {
         running = false
         meter?.invalidate()
         meter = nil
+        routeDetector.isRouteDetectionEnabled = false
         player.pause()
         player.replaceCurrentItem(with: nil)
         core.stop()
