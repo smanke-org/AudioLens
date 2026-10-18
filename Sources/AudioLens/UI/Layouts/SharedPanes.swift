@@ -106,13 +106,18 @@ struct DevicesPane: View {
                     LabeledContent("Equalizer", value: s.eqEnabled ? (EQPreset.matching(s.eqGains)?.name ?? "Custom") : "Off").font(.callout)
                 }
             }
-            Section {
-                AirPlaySpeakerRows()
-            } header: {
-                Text("AirPlay Speakers on Your Network")
-            } footer: {
-                Text("Connect opens Sound settings, where one click makes the speaker your Mac's output; macOS doesn't let other apps connect AirPlay speakers themselves. Once connected, AudioLens remembers its volume and EQ.")
-                    .font(.caption).foregroundStyle(.secondary)
+            let groups = AirPlayBrowser.shared.groupedForList
+            ForEach(groups, id: \.kind) { group in
+                Section {
+                    ForEach(group.speakers) { AirPlaySpeakerRow(speaker: $0) }
+                } header: {
+                    Text("AirPlay · \(group.kind.title)")
+                } footer: {
+                    if group.kind == groups.last?.kind {
+                        Text("Connect opens Sound settings, where one click makes the speaker your Mac's output; macOS doesn't let other apps connect AirPlay speakers themselves. Once connected, AudioLens remembers its volume and EQ.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
             }
             Section {
             } footer: {

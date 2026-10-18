@@ -10,15 +10,41 @@ struct AirPlaySpeaker: Identifiable, Hashable {
     /// The model the speaker announces, such as "AudioAccessory5,1" (a HomePod mini) or "AppleTV14,1".
     var model: String?
 
+    /// What sort of device it is, for grouping, in the order the groups are shown.
+    enum Kind: Int, CaseIterable, Comparable {
+        case homePod, appleTV, tv, speaker, mac
+
+        var title: String {
+            switch self {
+            case .homePod: "HomePods"
+            case .appleTV: "Apple TVs"
+            case .tv: "TVs"
+            case .speaker: "Speakers"
+            case .mac: "Macs"
+            }
+        }
+
+        static func < (a: Kind, b: Kind) -> Bool { a.rawValue < b.rawValue }
+    }
+
+    var kind: Kind {
+        let m = (model ?? "").lowercased(), n = name.lowercased()
+        if m.hasPrefix("audioaccessory") || n.contains("homepod") { return .homePod }
+        if m.hasPrefix("appletv") || n.contains("apple tv") { return .appleTV }
+        if m.hasPrefix("mac") || n.contains("macbook") || n.contains("imac") || n.contains("mac mini") || n.contains("mac studio") { return .mac }
+        if n.contains(" tv") || n.hasSuffix("tv") || n.contains("television") { return .tv }
+        return .speaker
+    }
+
     var symbol: String {
         let m = (model ?? "").lowercased(), n = name.lowercased()
-        if m.hasPrefix("audioaccessory5") || n.contains("homepod mini") { return "homepodmini" }
-        if m.hasPrefix("audioaccessory") || n.contains("homepod") { return "homepod" }
-        if m.hasPrefix("appletv") || n.contains("apple tv") { return "appletv" }
-        if m.hasPrefix("macbook") || n.contains("macbook") { return "laptopcomputer" }
-        if m.hasPrefix("mac") || n.contains("imac") || n.contains("mac mini") || n.contains("mac studio") { return "desktopcomputer" }
-        if n.contains(" tv") || n.hasSuffix("tv") { return "tv" }
-        return "hifispeaker"
+        switch kind {
+        case .homePod: return m.hasPrefix("audioaccessory5") || n.contains("homepod mini") ? "homepodmini" : "homepod"
+        case .appleTV: return "appletv"
+        case .tv: return "tv"
+        case .speaker: return "hifispeaker"
+        case .mac: return m.hasPrefix("macbook") || n.contains("macbook") ? "laptopcomputer" : "desktopcomputer"
+        }
     }
 }
 
@@ -212,28 +238,46 @@ struct AirPlayConnectButton: View {
     }
 }
 
-/// The speakers on the network that aren't connected, as rows for a device list.
+extension AirPlayBrowser {
+    /// Speakers that aren't connected and aren't already listed as remembered devices, grouped
+    /// by kind in display order: HomePods, Apple TVs, TVs, other speakers, then Macs.
+    var groupedForList: [(kind: AirPlaySpeaker.Kind, speakers: [AirPlaySpeaker])] {
+        let remembered = Set(SettingsStore.shared.devices.values.compactMap { $0.airPlay ? $0.name : nil })
+        let others = unconnected.filter { !remembered.contains($0.name) }
+        return Dictionary(grouping: others, by: \.kind).sorted { $0.key < $1.key }.map { ($0.key, $0.value) }
+    }
+}
+
+/// One AirPlay speaker that isn't connected.
+struct AirPlaySpeakerRow: View {
+    let speaker: AirPlaySpeaker
+    var compact = false
+
+    var body: some View {
+        HStack(spacing: compact ? 8 : 10) {
+            DeviceBadge(symbol: speaker.symbol, size: compact ? 22 : 28)
+            Text(speaker.name).lineLimit(1).truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(-1)
+            AirPlayConnectButton(name: speaker.name, iconOnly: compact)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+/// The speakers grouped under small labels, for the compact panel.
 struct AirPlaySpeakerRows: View {
     var compact = false
     @State private var browser = AirPlayBrowser.shared
-    @State private var store = SettingsStore.shared
 
     var body: some View {
-        let remembered = Set(store.devices.values.compactMap { $0.airPlay ? $0.name : nil })
-        // Remembered speakers have their own rows (with their saved volume); these are the rest.
-        let others = browser.unconnected.filter { !remembered.contains($0.name) }
-        ForEach(others) { speaker in
-            HStack(spacing: compact ? 8 : 10) {
-                DeviceBadge(symbol: speaker.symbol, size: compact ? 22 : 28)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(speaker.name).lineLimit(1).truncationMode(.tail)
-                    Text(compact ? "AirPlay" : "AirPlay · not connected").font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .layoutPriority(-1)
-                AirPlayConnectButton(name: speaker.name, iconOnly: compact)
-            }
-            .frame(maxWidth: .infinity)
+        let groups = browser.groupedForList
+        ForEach(groups, id: \.kind) { group in
+            Text(group.kind.title.uppercased())
+                .font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                .padding(.top, group.kind == groups.first?.kind ? 0 : 6)
+                .accessibilityAddTraits(.isHeader)
+            ForEach(group.speakers) { AirPlaySpeakerRow(speaker: $0, compact: compact) }
         }
         .onAppear { browser.start() }
     }

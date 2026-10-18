@@ -30,8 +30,10 @@ struct DeviceInspectorLayout: View {
                         .tag(Selection.device(uid))
                     }
                 }
-                Section("AirPlay on Your Network") {
-                    AirPlaySpeakerRows(compact: true)
+                ForEach(AirPlayBrowser.shared.groupedForList, id: \.kind) { group in
+                    Section("AirPlay · \(group.kind.title)") {
+                        ForEach(group.speakers) { AirPlaySpeakerRow(speaker: $0, compact: true) }
+                    }
                 }
                 Section("Apps") {
                     Label("All Playing Apps", systemImage: "square.grid.2x2").badge(engine.visibleApps.count).tag(Selection.allApps)
