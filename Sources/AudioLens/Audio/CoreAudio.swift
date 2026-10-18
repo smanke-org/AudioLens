@@ -115,6 +115,28 @@ enum CA {
         get(device, kAudioDevicePropertyTransportType, default: UInt32(0))
     }
 
+    /// Runs one of a device's volume translations (scalar ⇄ dB) on its output, trying the main
+    /// element and then channel 1. Nil if the device can't translate.
+    static func translateVolume(_ device: AudioObjectID, _ selector: AudioObjectPropertySelector, _ value: Float32) -> Float32? {
+        for element in [kAudioObjectPropertyElementMain, 1] where has(device, selector, kAudioObjectPropertyScopeOutput, element: element) {
+            var a = address(selector, kAudioObjectPropertyScopeOutput, element)
+            var v = value
+            var size = UInt32(MemoryLayout<Float32>.size)
+            if AudioObjectGetPropertyData(device, &a, 0, nil, &size, &v) == noErr { return v }
+        }
+        return nil
+    }
+
+    /// The output volume's range in dB.
+    static func volumeRangeDB(_ device: AudioObjectID) -> ClosedRange<Double>? {
+        for element in [kAudioObjectPropertyElementMain, 1] where has(device, kAudioDevicePropertyVolumeRangeDecibels, kAudioObjectPropertyScopeOutput, element: element) {
+            let r = get(device, kAudioDevicePropertyVolumeRangeDecibels, kAudioObjectPropertyScopeOutput, element: element,
+                        default: AudioValueRange(mMinimum: 0, mMaximum: 0))
+            if r.mMaximum > r.mMinimum { return r.mMinimum...r.mMaximum }
+        }
+        return nil
+    }
+
     static func nominalSampleRate(_ device: AudioObjectID) -> Double {
         get(device, kAudioDevicePropertyNominalSampleRate, default: Float64(48000))
     }

@@ -25,12 +25,14 @@ final class SettingsStore {
         static let hotKeyMute = "hotKey.mute"
         // Per Mac.
         static let deviceVolumes = "deviceVolumes"
+        static let deviceTrims = "deviceTrims"
+        static let carryLevel = "carryLevelInDeviceVolume"
         static let layout = "windowLayout"
         static let compact = "windowCompact"
     }
 
     /// Settings that follow the user between Macs.
-    static let syncedKeys = [Key.apps, Key.devices, Key.allowBoost, Key.showPinned, Key.showMeters,
+    static let syncedKeys = [Key.apps, Key.devices, Key.allowBoost, Key.showPinned, Key.showMeters, Key.carryLevel,
                              Key.volumeStep, Key.hotKeyUp, Key.hotKeyDown, Key.hotKeyMute]
 
     private(set) var apps: [String: AppAudioSettings] = [:]
@@ -40,6 +42,14 @@ final class SettingsStore {
     var allowBoost = true { didSet { save(allowBoost, Key.allowBoost, oldValue != allowBoost); if !allowBoost { capBoosts() } } }
     var showPinnedWhenSilent = true { didSet { save(showPinnedWhenSilent, Key.showPinned, oldValue != showPinnedWhenSilent) } }
     var showMeters = true { didSet { save(showMeters, Key.showMeters, oldValue != showMeters) } }
+    /// Keep the device's own volume at the loudest adjusted app's level, so quitting AudioLens
+    /// doesn't make apps jump louder.
+    var carryLevelInDeviceVolume = true {
+        didSet {
+            save(carryLevelInDeviceVolume, Key.carryLevel, oldValue != carryLevelInDeviceVolume)
+            if oldValue != carryLevelInDeviceVolume, !loading { AudioEngine.shared.settingsChanged(appID: nil) }
+        }
+    }
     /// How far one hotkey press moves a volume, 0.01…0.25.
     var volumeStep = 0.05 { didSet { save(volumeStep, Key.volumeStep, oldValue != volumeStep) } }
     var hotKeyUp: Shortcut? = SettingsStore.defaultUp { didSet { saveShortcut(hotKeyUp, Key.hotKeyUp, oldValue != hotKeyUp) } }
@@ -72,6 +82,7 @@ final class SettingsStore {
         allowBoost = defaults.object(forKey: Key.allowBoost) as? Bool ?? true
         showPinnedWhenSilent = defaults.object(forKey: Key.showPinned) as? Bool ?? true
         showMeters = defaults.object(forKey: Key.showMeters) as? Bool ?? true
+        carryLevelInDeviceVolume = defaults.object(forKey: Key.carryLevel) as? Bool ?? true
         volumeStep = min(max(defaults.object(forKey: Key.volumeStep) as? Double ?? 0.05, 0.01), 0.25)
         hotKeyUp = shortcut(Key.hotKeyUp, default: Self.defaultUp)
         hotKeyDown = shortcut(Key.hotKeyDown, default: Self.defaultDown)
@@ -94,6 +105,7 @@ final class SettingsStore {
         return [
             Key.apps: data(apps.filter { !$0.key.hasPrefix("pid:") }), Key.devices: data(devices), Key.allowBoost: allowBoost,
             Key.showPinned: showPinnedWhenSilent, Key.showMeters: showMeters, Key.volumeStep: volumeStep,
+            Key.carryLevel: carryLevelInDeviceVolume,
             Key.hotKeyUp: hotKeyUp.map(data) ?? Data(), Key.hotKeyDown: hotKeyDown.map(data) ?? Data(),
             Key.hotKeyMute: hotKeyMute.map(data) ?? Data(),
         ]
@@ -161,6 +173,17 @@ final class SettingsStore {
     }
 
     func savedVolume(for uid: String) -> Double? { deviceVolumes[uid] }
+
+    /// How far AudioLens last moved a device's own volume from the user's level, in dB (per Mac).
+    func trim(for uid: String) -> Double {
+        (defaults.dictionary(forKey: Key.deviceTrims) as? [String: Double])?[uid] ?? 0
+    }
+
+    func saveTrim(_ value: Double, for uid: String) {
+        var all = defaults.dictionary(forKey: Key.deviceTrims) as? [String: Double] ?? [:]
+        all[uid] = abs(value) < 0.01 ? nil : value
+        defaults.set(all, forKey: Key.deviceTrims)
+    }
 
     func saveVolume(_ value: Double, for uid: String) {
         guard abs((deviceVolumes[uid] ?? -1) - value) > 0.001 else { return }

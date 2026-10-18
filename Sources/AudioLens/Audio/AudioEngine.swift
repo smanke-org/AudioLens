@@ -48,6 +48,7 @@ final class AudioEngine {
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var started = false
     @ObservationIgnored private var asked = false
+    @ObservationIgnored private var hasScanned = false
     private let myPID = ProcessInfo.processInfo.processIdentifier
     /// How long an app stays listed after it goes quiet.
     static let lingerSeconds: TimeInterval = 8
@@ -87,6 +88,8 @@ final class AudioEngine {
                     "playing": engine.running.values.filter(\.isPlaying).map(\.id),
                     "taps": taps, "failures": engine.failures,
                     "output": OutputDevices.shared.defaultUID ?? "", "outputVolume": OutputDevices.shared.volume ?? -1,
+                    "trimDB": OutputDevices.shared.trimDB,
+                    "hardwareVolume": OutputDevices.volume(of: CA.defaultOutputDevice()) ?? -1,
                 ]
                 if let data = try? JSONSerialization.data(withJSONObject: status, options: [.prettyPrinted, .sortedKeys]) {
                     try? data.write(to: URL(fileURLWithPath: path), options: .atomic)
@@ -208,6 +211,7 @@ final class AudioEngine {
             }
         }
         watchProcesses(objects)
+        hasScanned = started
         reconcile()
     }
 
@@ -292,15 +296,6 @@ final class AudioEngine {
     // MARK: - Taps
 
     func settingsChanged(appID: String?) {
-        if let appID, let pipeline = pipelines[appID] {
-            let s = SettingsStore.shared.app(appID)
-            pipeline.processor.setVolume(s.volume, muted: s.muted)
-        } else if appID == nil {
-            for (id, pipeline) in pipelines {
-                let s = SettingsStore.shared.app(id)
-                pipeline.processor.setVolume(s.volume, muted: s.muted)
-            }
-        }
         // Asked for by the user: if this is the first tap, now is the time to ask for permission.
         if let appID, needsTap(appID), !CapturePermission.shared.isAuthorized, !asked {
             asked = true
@@ -374,6 +369,52 @@ final class AudioEngine {
         waitingForPermission = waiting
         let ids = Set(pipelines.keys)
         if ids != tapped { tapped = ids }
+        updateLevels()
+    }
+
+    // MARK: - Levels
+
+    /// Decides how far the system output's own volume should move to carry the app levels
+    /// (see `OutputDevices.trimDB`), moves it, and gives every tap its level relative to that.
+    ///
+    /// The trim follows the loudest app AudioLens adjusts on the system output, so that app
+    /// needs no gain of its own. While an app AudioLens isn't adjusting plays there (or one it
+    /// ignores), the trim is 0: that app plays at the device volume and must stay at the
+    /// user's level. With nothing playing, the trim stays where it is, so silence never moves
+    /// the volume.
+    private func updateLevels() {
+        // Until the first look at what's playing, leave the trim where the last run left it:
+        // it already carries the right level, and dropping it would make apps jump louder.
+        guard hasScanned else { return }
+        let devices = OutputDevices.shared
+        let store = SettingsStore.shared
+        let defaultUID = devices.defaultUID
+        var desired: Double?
+        if !store.carryLevelInDeviceVolume || defaultUID == nil {
+            desired = 0
+        } else if !pipelines.values.contains(where: { $0.deviceUID == defaultUID }) {
+            desired = 0
+        } else {
+            let audible = running.values.filter { isAudible($0) && outputDevice(for: $0.id)?.uid == defaultUID }
+            if audible.contains(where: { pipelines[$0.id] == nil }) {
+                desired = 0
+            } else if !audible.isEmpty {
+                desired = audible.map { app -> Double in
+                    let s = store.app(app.id)
+                    return s.muted ? -120 : StereoProcessor.decibels(forVolume: s.volume)
+                }.max()
+            }
+        }
+        let trim = desired.map { devices.setTrim($0) } ?? devices.trimDB
+        for (id, pipeline) in pipelines {
+            let s = store.app(id)
+            pipeline.processor.setVolume(s.volume, muted: s.muted, trimDB: pipeline.deviceUID == defaultUID ? trim : 0)
+        }
+    }
+
+    /// The trim a new tap on a device starts with.
+    private func currentTrim(for deviceUID: String) -> Double {
+        deviceUID == OutputDevices.shared.defaultUID ? OutputDevices.shared.trimDB : 0
     }
 
     private func build(_ app: AudioApp, device: OutputDevice) {
@@ -383,7 +424,7 @@ final class AudioEngine {
         do {
             let pipeline = try TapPipeline(
                 appID: app.id, name: app.name, processObjects: objects, device: device,
-                volume: s.volume, muted: s.muted,
+                volume: s.volume, muted: s.muted, trimDB: currentTrim(for: device.uid),
                 chain: { EQChain(settings: deviceSettings, sampleRate: $0) },
                 onRateChange: { AudioEngine.shared.rebuild(app.id) })
             pipelines[app.id] = pipeline

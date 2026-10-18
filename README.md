@@ -17,6 +17,7 @@ Requires macOS 26 or later.
 ## What it does
 
 - **Per-app volume.** Every app that's playing gets a slider, from silent to 150%. A soft limiter keeps boosted audio from distorting. Volumes are remembered across restarts.
+- **No jump when it quits.** AudioLens keeps your Mac's own volume at the level of the loudest app it's adjusting and turns quieter apps down from there. If AudioLens quits or crashes, the loudest app keeps its level and the others rise only to it, never to full volume. (Settings › General, on by default.)
 - **Per-app output.** Send an app to a different device than the system output, for example a call to your AirPods while music plays on the speakers.
 - **Device memory.** Each output device (speakers, headphones, AirPods, HomePods, displays) keeps its own volume on each Mac. When it becomes the output again, AudioLens puts the volume back. Lock a device to keep it at that level.
 - **Equalizer per device.** A 10-band EQ with presets for each output device, plus **headphone correction**: pick your headphone model from thousands of measurements in the [AutoEQ](https://github.com/jaakkopasanen/AutoEq) project, or import a ParametricEQ.txt file.
@@ -30,7 +31,7 @@ Requires macOS 26 or later.
 
 AudioLens uses Core Audio process taps (macOS 14.4 and later). For an app whose sound needs changing, it captures the app's audio, mutes the original, applies the volume, EQ and limiter, and plays the result on the right device. Apps at 100% on the system output with no EQ are left untouched, so AudioLens costs nothing until you use it. Nothing is recorded or sent anywhere; the sound only passes through on your Mac.
 
-When AudioLens quits, every app goes straight back to normal macOS output.
+When AudioLens quits, every app goes straight back to normal macOS output, at the level the Mac's own volume was carrying.
 
 ## Updates
 

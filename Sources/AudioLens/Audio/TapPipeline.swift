@@ -37,11 +37,11 @@ final class TapPipeline {
     }
 
     init(appID: String, name: String, processObjects: [AudioObjectID], device: OutputDevice,
-         volume: Double, muted: Bool, chain: (Double) -> EQChain, onRateChange: @escaping @MainActor () -> Void) throws {
+         volume: Double, muted: Bool, trimDB: Double, chain: (Double) -> EQChain, onRateChange: @escaping @MainActor () -> Void) throws {
         self.appID = appID
         self.processObjects = processObjects
         self.deviceUID = device.uid
-        processor.setVolume(volume, muted: muted)
+        processor.setVolume(volume, muted: muted, trimDB: trimDB)
 
         // 1. The tap: a stereo mix of the app's processes, muted where they'd normally play.
         let description = CATapDescription(stereoMixdownOfProcesses: processObjects)

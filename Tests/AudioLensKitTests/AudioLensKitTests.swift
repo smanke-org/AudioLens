@@ -85,6 +85,15 @@ import Testing
         #expect(p.takePeak() == 0)
     }
 
+    @Test func trimTakesBackWhatTheDeviceVolumeCarries() {
+        // An app at 30% with the device volume moved to that level needs no gain of its own.
+        let p = StereoProcessor()
+        p.setVolume(0.3, muted: false, trimDB: StereoProcessor.decibels(forVolume: 0.3))
+        let input = [Float](repeating: 0.25, count: 512)
+        input.withUnsafeBufferPointer { _ = p.process(interleaved: $0.baseAddress, channels: 2, frames: 256) }
+        #expect(abs(p.left[255] - 0.25) < 1e-4)
+    }
+
     @Test func monoIsCopiedToBothSides() {
         let p = StereoProcessor()
         let input: [Float] = [0.1, 0.2, 0.3]

@@ -149,6 +149,12 @@ struct GeneralSettings: View {
                 }
             }
             Section {
+                Toggle("Keep the Mac's own volume at the app levels", isOn: $store.carryLevelInDeviceVolume)
+            } footer: {
+                Text("AudioLens sets your Mac's own volume to the level of the loudest app it's adjusting and turns quieter apps down from there. If AudioLens quits or crashes, nothing gets suddenly louder: the loudest app keeps its level, and the others rise only to it. Your device volume in AudioLens stays as you set it; only the volume macOS shows moves. While an app AudioLens isn't adjusting plays, the Mac's volume stays at your device level.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section {
                 LabeledContent("System Audio Recording") {
                     switch permission.status {
                     case .authorized: Label("Allowed", systemImage: "checkmark.circle.fill").foregroundStyle(.green)

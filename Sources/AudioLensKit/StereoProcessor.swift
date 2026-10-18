@@ -67,9 +67,17 @@ public final class StereoProcessor: @unchecked Sendable {
         return Float(pow(volume, 1.66))
     }
 
-    /// From the main thread: the level to fade to (0 when muted).
-    public func setVolume(_ volume: Double, muted: Bool) {
-        let gain = muted ? 0 : Self.amplitude(forVolume: volume)
+    /// The same, in dB; -120 for silence.
+    public static func decibels(forVolume volume: Double) -> Double {
+        guard volume > 0.0001 else { return -120 }
+        return 20 * log10(pow(volume, 1.66))
+    }
+
+    /// From the main thread: the level to fade to (0 when muted). `trimDB` is how far the
+    /// output device's own volume has been moved to carry part of that level, which this
+    /// processor then takes back out.
+    public func setVolume(_ volume: Double, muted: Bool, trimDB: Double = 0) {
+        let gain = muted ? 0 : Self.amplitude(forVolume: volume) * Float(pow(10, -trimDB / 20))
         shared.withLock { $0.gain = gain; $0.generation &+= 1 }
     }
 
