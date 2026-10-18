@@ -95,7 +95,10 @@ func knownDeviceUIDs() -> [String] {
     let connected = OutputDevices.shared.devices.map(\.uid)
     let connectedKeys = Set(connected.map(store.memoryKey))
     // AirPlay speakers have their own checkboxes; their memories aren't devices to reconnect.
-    let remembered = store.devices.keys.filter { !connectedKeys.contains($0) && !$0.hasPrefix(SettingsStore.airPlayKeyPrefix) }
+    // (Older versions saved them under their changing UIDs; the airPlay flag catches those.)
+    let remembered = store.devices.keys.filter { key in
+        !connectedKeys.contains(key) && !key.hasPrefix(SettingsStore.airPlayKeyPrefix) && !(store.devices[key]?.airPlay ?? false)
+    }
         .sorted { (SettingsStore.shared.device($0).name ?? $0) < (SettingsStore.shared.device($1).name ?? $1) }
     return connected + remembered
 }

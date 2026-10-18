@@ -328,7 +328,9 @@ struct LevelMeter: View {
 // MARK: - Scroll wheel
 
 extension View {
-    /// Calls `action` with the vertical scroll amount (positive = up) while the pointer is over the view.
+    /// Calls `action` with the vertical scroll amount (positive = up) while the pointer is over
+    /// the view and Option is held. Plain scrolling always scrolls the list: a slider that
+    /// grabbed the wheel as the pointer passed over it stopped the scroll and changed a volume.
     func onScrollWheel(_ action: @escaping (Double) -> Void) -> some View {
         overlay(ScrollWheelCatcher(action: action).allowsHitTesting(true))
     }
@@ -357,7 +359,8 @@ private struct ScrollWheelCatcher: NSViewRepresentable {
             // A local monitor rather than scrollWheel(_:), so clicks and drags still reach the
             // SwiftUI control underneath.
             monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
-                guard let self, let window = self.window, event.window === window else { return event }
+                guard let self, let window = self.window, event.window === window,
+                      event.modifierFlags.contains(.option) else { return event }
                 let point = self.convert(event.locationInWindow, from: nil)
                 guard self.bounds.contains(point) else { return event }
                 let dy = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY / 6 : event.scrollingDeltaY
