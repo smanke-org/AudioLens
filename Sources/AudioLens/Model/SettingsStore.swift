@@ -1,4 +1,5 @@
 import AudioLensKit
+import CoreAudio
 import Foundation
 import Observation
 
@@ -27,6 +28,8 @@ final class SettingsStore {
         static let deviceVolumes = "deviceVolumes"
         static let deviceTrims = "deviceTrims"
         static let recentApps = "recentApps"
+        static let airPlayNames = "airPlayNames"
+        static let outputGroup = "outputGroup"
         static let carryLevel = "carryLevelInDeviceVolume"
         static let layout = "windowLayout"
         static let compact = "windowCompact"
@@ -87,6 +90,8 @@ final class SettingsStore {
         apps = (defaults.data(forKey: Key.apps)).flatMap { try? decoder.decode([String: AppAudioSettings].self, from: $0) } ?? [:]
         devices = (defaults.data(forKey: Key.devices)).flatMap { try? decoder.decode([String: DeviceSettings].self, from: $0) } ?? [:]
         deviceVolumes = defaults.dictionary(forKey: Key.deviceVolumes) as? [String: Double] ?? [:]
+        airPlayNames = defaults.dictionary(forKey: Key.airPlayNames) as? [String: String] ?? [:]
+        output = defaults.data(forKey: Key.outputGroup).flatMap { try? decoder.decode(OutputGroup.self, from: $0) } ?? OutputGroup()
         recentApps = defaults.data(forKey: Key.recentApps).flatMap { try? decoder.decode([String: RecentApp].self, from: $0) } ?? [:]
         allowBoost = defaults.object(forKey: Key.allowBoost) as? Bool ?? true
         showPinnedWhenSilent = defaults.object(forKey: Key.showPinned) as? Bool ?? true
@@ -178,47 +183,96 @@ final class SettingsStore {
 
     // MARK: - Devices
 
-    func device(_ uid: String) -> DeviceSettings { devices[uid] ?? DeviceSettings() }
+    /// Where a device's settings are kept. For most devices that's its UID. An AirPlay
+    /// speaker shows up as a generic "AirPlay" device whose UID changes with every connection,
+    /// so it's kept by the speaker's name ("airplay:Bedroom") when AudioLens connected it,
+    /// and under one shared "airplay:AirPlay" otherwise. Keys that aren't UIDs pass through.
+    func memoryKey(_ uid: String) -> String {
+        if uid.hasPrefix(Self.airPlayKeyPrefix) { return uid }
+        if let name = airPlayNames[uid] { return Self.airPlayKeyPrefix + name }
+        if OutputDevices.shared.device(uid: uid)?.transport == kAudioDeviceTransportTypeAirPlay {
+            return Self.airPlayKeyPrefix + "AirPlay"
+        }
+        return uid
+    }
+
+    static let airPlayKeyPrefix = "airplay:"
+
+    /// The speaker each AirPlay connection was made for, by its current UID (per Mac).
+    private(set) var airPlayNames: [String: String] = [:]
+
+    func nameAirPlayDevice(_ uid: String, as name: String) {
+        guard airPlayNames[uid] != name else { return }
+        // Only the current connection matters; older UIDs never come back.
+        airPlayNames = [uid: name]
+        defaults.set(airPlayNames, forKey: Key.airPlayNames)
+    }
+
+    func device(_ uid: String) -> DeviceSettings { devices[memoryKey(uid)] ?? DeviceSettings() }
 
     func updateDevice(_ uid: String, _ change: (inout DeviceSettings) -> Void) {
+        let key = memoryKey(uid)
         var s = device(uid)
         change(&s)
-        guard s != devices[uid] else { return }
-        let soundChanged = s.eqEnabled != devices[uid]?.eqEnabled || s.eqGains != devices[uid]?.eqGains
-            || s.correction != devices[uid]?.correction
-        devices[uid] = s
+        if key.hasPrefix(Self.airPlayKeyPrefix) { s.airPlay = true }
+        guard s != devices[key] else { return }
+        let soundChanged = s.eqEnabled != devices[key]?.eqEnabled || s.eqGains != devices[key]?.eqGains
+            || s.correction != devices[key]?.correction
+        devices[key] = s
         defaults.set((try? JSONEncoder().encode(devices)) ?? Data(), forKey: Key.devices)
         if !loading { SettingsSync.shared.localDidChange() }
-        if soundChanged { AudioEngine.shared.eqChanged(deviceUID: uid) }
+        if soundChanged { AudioEngine.shared.eqChanged(deviceUID: key) }
     }
 
     /// Drops everything remembered about a device that isn't connected.
     func forgetDevice(_ uid: String) {
-        devices[uid] = nil
-        deviceVolumes[uid] = nil
+        let key = memoryKey(uid)
+        devices[key] = nil
+        deviceVolumes[key] = nil
         defaults.set((try? JSONEncoder().encode(devices)) ?? Data(), forKey: Key.devices)
         defaults.set(deviceVolumes, forKey: Key.deviceVolumes)
+        output.members.removeAll { $0 == key }
         SettingsSync.shared.localDidChange()
     }
 
-    func savedVolume(for uid: String) -> Double? { deviceVolumes[uid] }
+    func savedVolume(for uid: String) -> Double? { deviceVolumes[memoryKey(uid)] }
 
     /// How far AudioLens last moved a device's own volume from the user's level, in dB (per Mac).
     func trim(for uid: String) -> Double {
-        (defaults.dictionary(forKey: Key.deviceTrims) as? [String: Double])?[uid] ?? 0
+        (defaults.dictionary(forKey: Key.deviceTrims) as? [String: Double])?[memoryKey(uid)] ?? 0
     }
 
     func saveTrim(_ value: Double, for uid: String) {
         var all = defaults.dictionary(forKey: Key.deviceTrims) as? [String: Double] ?? [:]
-        all[uid] = abs(value) < 0.01 ? nil : value
+        all[memoryKey(uid)] = abs(value) < 0.01 ? nil : value
         defaults.set(all, forKey: Key.deviceTrims)
     }
 
     func saveVolume(_ value: Double, for uid: String) {
-        guard abs((deviceVolumes[uid] ?? -1) - value) > 0.001 else { return }
-        deviceVolumes[uid] = value
+        let key = memoryKey(uid)
+        guard abs((deviceVolumes[key] ?? -1) - value) > 0.001 else { return }
+        deviceVolumes[key] = value
         defaults.set(deviceVolumes, forKey: Key.deviceVolumes)
     }
+
+    // MARK: - Output group
+
+    /// Several outputs at once (per Mac: the devices differ from Mac to Mac).
+    var output = OutputGroup() {
+        didSet {
+            guard output != oldValue, !loading else { return }
+            defaults.set((try? JSONEncoder().encode(output)) ?? Data(), forKey: Key.outputGroup)
+            AudioEngine.shared.groupChanged()
+        }
+    }
+
+    func setInGroup(_ uid: String, _ member: Bool) {
+        let key = memoryKey(uid)
+        if member, !output.members.contains(key) { output.members.append(key) }
+        if !member { output.members.removeAll { $0 == key } }
+    }
+
+    func isInGroup(_ uid: String) -> Bool { output.members.contains(memoryKey(uid)) }
 
     // MARK: - Saving
 

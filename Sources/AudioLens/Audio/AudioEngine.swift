@@ -169,10 +169,42 @@ final class AudioEngine {
         return audible.max { (lastPlayed[$0.id] ?? .distantPast) < (lastPlayed[$1.id] ?? .distantPast) }
     }
 
-    /// The device an app plays to: its chosen one if connected, otherwise the system output.
+    /// The device an app plays to: its chosen one if connected, otherwise the group's first
+    /// output while a group is on, otherwise the system output.
     func outputDevice(for appID: String) -> OutputDevice? {
+        outputDevices(for: appID).first
+    }
+
+    /// Every device an app plays to: its chosen one, the group, or the system output.
+    func outputDevices(for appID: String) -> [OutputDevice] {
         let devices = OutputDevices.shared
-        return devices.device(uid: SettingsStore.shared.app(appID).outputUID) ?? devices.defaultDevice
+        if let chosen = devices.device(uid: SettingsStore.shared.app(appID).outputUID) { return [chosen] }
+        if let group = activeGroup { return group }
+        return devices.defaultDevice.map { [$0] } ?? []
+    }
+
+    /// The outputs of the group, when it's on and at least two of them are connected: the
+    /// system output first if it's a member, AirPlay last (it can't be the aggregate's clock
+    /// without making the others drift).
+    var activeGroup: [OutputDevice]? {
+        let store = SettingsStore.shared
+        guard store.output.enabled else { return nil }
+        let devices = OutputDevices.shared
+        let members = devices.devices.filter { store.output.members.contains(store.memoryKey($0.uid)) }
+        guard members.count >= 2 else { return nil }
+        return members.sorted { a, b in
+            let aAir = a.transport == kAudioDeviceTransportTypeAirPlay, bAir = b.transport == kAudioDeviceTransportTypeAirPlay
+            if aAir != bAir { return !aAir }
+            if (a.uid == devices.defaultUID) != (b.uid == devices.defaultUID) { return a.uid == devices.defaultUID }
+            return store.output.members.firstIndex(of: store.memoryKey(a.uid)) ?? 0 < store.output.members.firstIndex(of: store.memoryKey(b.uid)) ?? 0
+        }
+    }
+
+    /// The group changed: fine-tuning applies live; anything else rebuilds the taps.
+    func groupChanged() {
+        let offset = SettingsStore.shared.output.syncOffsetMs
+        for pipeline in pipelines.values where pipeline.deviceUIDs.count > 1 { pipeline.setSyncOffset(offset) }
+        reconcile()
     }
 
     func isTapped(_ appID: String) -> Bool { tapped.contains(appID) }
@@ -322,9 +354,10 @@ final class AudioEngine {
     }
 
     func eqChanged(deviceUID: String?) {
-        for pipeline in pipelines.values where deviceUID == nil || pipeline.deviceUID == deviceUID {
-            let settings = SettingsStore.shared.device(pipeline.deviceUID)
-            pipeline.setChain { EQChain(settings: settings, sampleRate: $0) }
+        let store = SettingsStore.shared
+        for pipeline in pipelines.values
+        where deviceUID == nil || pipeline.deviceUIDs.contains(where: { store.memoryKey($0) == deviceUID }) {
+            pipeline.setChain { uid, rate in EQChain(settings: store.device(uid), sampleRate: rate) }
         }
         if let deviceUID, SettingsStore.shared.device(deviceUID).processesSound, !CapturePermission.shared.isAuthorized, !asked {
             asked = true
@@ -341,6 +374,8 @@ final class AudioEngine {
         let s = SettingsStore.shared.app(appID)
         guard !s.ignored else { return false }
         if s.changesSound { return true }
+        // A group plays everything through AudioLens: only a tap can reach several outputs.
+        if activeGroup != nil { return true }
         guard let device = outputDevice(for: appID) else { return false }
         return SettingsStore.shared.device(device.uid).processesSound
     }
@@ -371,19 +406,21 @@ final class AudioEngine {
 
         for app in running.values where needsTap(app.id) {
             guard allowed else { waiting = true; continue }
-            guard let device = outputDevice(for: app.id) else { continue }
+            let targets = outputDevices(for: app.id)
+            guard !targets.isEmpty else { continue }
             if let pipeline = pipelines[app.id] {
-                // Rebuild when the device changed, or a process that isn't in the tap started playing.
+                // Rebuild when the outputs changed, or a process that isn't in the tap started playing.
                 let missing = app.playingObjects.contains { !pipeline.processObjects.contains($0) }
-                guard pipeline.deviceUID != device.uid || missing else { continue }
-                remove(app.id, reason: pipeline.deviceUID != device.uid ? "output changed" : "new process")
+                let moved = pipeline.deviceUIDs != targets.map(\.uid)
+                guard moved || missing else { continue }
+                remove(app.id, reason: moved ? "output changed" : "new process")
             } else if !app.isPlaying && !SettingsStore.shared.app(app.id).changesSound {
                 // Only the device's EQ applies, so a silent app can wait until it plays. One with
                 // its own volume, mute or output is tapped already, or its first sound would
                 // come out at full volume before the tap started.
                 continue
             }
-            build(app, device: device)
+            build(app, devices: targets)
         }
         waitingForPermission = waiting
         let ids = Set(pipelines.keys)
@@ -409,7 +446,9 @@ final class AudioEngine {
         let store = SettingsStore.shared
         let defaultUID = devices.defaultUID
         var desired: Double?
-        if !store.carryLevelInDeviceVolume || defaultUID == nil {
+        if !store.carryLevelInDeviceVolume || defaultUID == nil || activeGroup != nil {
+            // A group's outputs each keep their own volume; carrying a level in one of them
+            // would make that one louder or quieter than the rest.
             desired = 0
         } else if !pipelines.values.contains(where: { $0.deviceUID == defaultUID }) {
             desired = 0
@@ -427,7 +466,8 @@ final class AudioEngine {
         let trim = desired.map { devices.setTrim($0) } ?? devices.trimDB
         for (id, pipeline) in pipelines {
             let s = store.app(id)
-            pipeline.processor.setVolume(s.volume, muted: s.muted, trimDB: pipeline.deviceUID == defaultUID ? trim : 0)
+            let carried = pipeline.deviceUIDs.count == 1 && pipeline.deviceUID == defaultUID
+            pipeline.setVolume(s.volume, muted: s.muted, trimDB: carried ? trim : 0)
         }
     }
 
@@ -436,15 +476,17 @@ final class AudioEngine {
         deviceUID == OutputDevices.shared.defaultUID ? OutputDevices.shared.trimDB : 0
     }
 
-    private func build(_ app: AudioApp, device: OutputDevice) {
-        let s = SettingsStore.shared.app(app.id)
-        let deviceSettings = SettingsStore.shared.device(device.uid)
+    private func build(_ app: AudioApp, devices: [OutputDevice]) {
+        let store = SettingsStore.shared
+        let s = store.app(app.id)
         let objects = Array(Set(app.processObjects)).sorted()
         do {
             let pipeline = try TapPipeline(
-                appID: app.id, name: app.name, processObjects: objects, device: device,
-                volume: s.volume, muted: s.muted, trimDB: currentTrim(for: device.uid),
-                chain: { EQChain(settings: deviceSettings, sampleRate: $0) },
+                appID: app.id, name: app.name, processObjects: objects, devices: devices,
+                volume: s.volume, muted: s.muted,
+                trimDB: devices.count == 1 ? currentTrim(for: devices[0].uid) : 0,
+                syncOffsetMs: store.output.syncOffsetMs,
+                chain: { device, rate in EQChain(settings: store.device(device.uid), sampleRate: rate) },
                 onRateChange: { AudioEngine.shared.rebuild(app.id) })
             pipelines[app.id] = pipeline
             failures[app.id] = nil

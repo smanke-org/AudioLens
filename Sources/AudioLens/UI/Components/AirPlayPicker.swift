@@ -129,6 +129,7 @@ final class AirPlayBrowser {
 
     /// Opens Sound settings' output list and says which speaker to click.
     func connect(_ name: String?) {
+        if let name { OutputDevices.shared.pendingAirPlay = (name, Date()) }
         if let url = URL(string: "x-apple.systempreferences:com.apple.Sound-Settings.extension?output") {
             NSWorkspace.shared.open(url)
         }

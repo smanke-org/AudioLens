@@ -91,8 +91,11 @@ struct DeviceSummary: View {
 /// Every device worth showing: the connected ones, then remembered ones that aren't connected.
 @MainActor
 func knownDeviceUIDs() -> [String] {
+    let store = SettingsStore.shared
     let connected = OutputDevices.shared.devices.map(\.uid)
-    let remembered = SettingsStore.shared.devices.keys.filter { !connected.contains($0) }
+    let connectedKeys = Set(connected.map(store.memoryKey))
+    // The shared "airplay:AirPlay" memory isn't a speaker you can reconnect; leave it out.
+    let remembered = store.devices.keys.filter { !connectedKeys.contains($0) && $0 != SettingsStore.airPlayKeyPrefix + "AirPlay" }
         .sorted { (SettingsStore.shared.device($0).name ?? $0) < (SettingsStore.shared.device($1).name ?? $1) }
     return connected + remembered
 }

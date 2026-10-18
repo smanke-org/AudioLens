@@ -203,3 +203,21 @@ public enum WindowLayout: String, CaseIterable, Codable, Sendable, Identifiable 
 public func percentText(_ volume: Double) -> String {
     "\(Int((volume * 100).rounded()))%"
 }
+
+/// Several outputs playing at once ("the laptop and the Bedroom HomePod"), kept in sync.
+public struct OutputGroup: Codable, Equatable, Sendable {
+    public var enabled = false
+    /// Device memory keys (see `SettingsStore.memoryKey`), in the order the user chose them.
+    public var members: [String] = []
+    /// Fine-tuning on top of the reported latencies: positive holds the faster outputs back
+    /// more, negative less. Milliseconds.
+    public var syncOffsetMs: Double = 0
+
+    public init(enabled: Bool = false, members: [String] = [], syncOffsetMs: Double = 0) {
+        self.enabled = enabled
+        self.members = members
+        self.syncOffsetMs = syncOffsetMs
+    }
+
+    public static let offsetRange: ClosedRange<Double> = -500...500
+}

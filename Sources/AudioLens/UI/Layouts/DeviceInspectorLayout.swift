@@ -164,6 +164,7 @@ struct DeviceInspector: View {
                 DeviceVolumeSlider(uid: uid, thick: true)
                 DeviceMemoryToggles(uid: uid)
             }
+            Section("Several Outputs") { OutputGroupControls() }
             Section { DeviceEQPanel(uid: uid, graphHeight: 170) }
         }
         .formStyle(.grouped)

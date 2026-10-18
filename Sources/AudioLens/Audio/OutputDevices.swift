@@ -82,6 +82,9 @@ final class OutputDevices {
     /// The hardware volume AudioLens last set on the system output, to recognize its echo.
     @ObservationIgnored private var lastSetHardware: Double?
 
+    /// The AirPlay speaker AudioLens just sent the user to connect, to name the connection after.
+    @ObservationIgnored var pendingAirPlay: (name: String, at: Date)?
+
     /// The private aggregate devices AudioLens makes for its taps have this UID prefix.
     static let ownUIDPrefix = "com.smanke.AudioLens."
 
@@ -104,8 +107,19 @@ final class OutputDevices {
                   let uid = CA.string(id, kAudioDevicePropertyDeviceUID),
                   !uid.hasPrefix(Self.ownUIDPrefix),
                   CA.get(id, kAudioDevicePropertyIsHidden, default: UInt32(0)) == 0 else { continue }
-            let name = CA.string(id, kAudioObjectPropertyName) ?? "Output"
-            list.append(OutputDevice(objectID: id, uid: uid, name: name, transport: CA.transport(id)))
+            var name = CA.string(id, kAudioObjectPropertyName) ?? "Output"
+            let transport = CA.transport(id)
+            if transport == kAudioDeviceTransportTypeAirPlay {
+                // macOS calls every AirPlay connection "AirPlay"; name it after the speaker
+                // AudioLens was asked to connect, if this is that connection.
+                if let pending = pendingAirPlay, Date().timeIntervalSince(pending.at) < 180,
+                   SettingsStore.shared.airPlayNames[uid] == nil {
+                    SettingsStore.shared.nameAirPlayDevice(uid, as: pending.name)
+                    pendingAirPlay = nil
+                }
+                if let known = SettingsStore.shared.airPlayNames[uid] { name = known }
+            }
+            list.append(OutputDevice(objectID: id, uid: uid, name: name, transport: transport))
         }
         list.sort { a, b in
             if (a.objectID == defaultID) != (b.objectID == defaultID) { return a.objectID == defaultID }

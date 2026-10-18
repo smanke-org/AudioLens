@@ -85,6 +85,7 @@ struct DevicesPane: View {
 
     var body: some View {
         Form {
+            Section("Several Outputs") { OutputGroupControls() }
             ForEach(knownDeviceUIDs(), id: \.self) { uid in
                 Section {
                     HStack {
@@ -260,6 +261,7 @@ struct OutputBar: View {
     }
 
     private func subtitle(_ uid: String) -> String {
+        if let group = AudioEngine.shared.activeGroup { return "Also playing on " + group.filter { $0.uid != uid }.map(\.name).joined(separator: ", ") }
         let s = store.device(uid)
         var parts: [String] = []
         if s.lockVolume { parts.append("Volume locked") } else if s.restoreVolume { parts.append("Volume remembered") }

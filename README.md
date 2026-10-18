@@ -23,6 +23,7 @@ Requires macOS 26 or later.
 - **Equalizer per device.** A 10-band EQ with presets for each output device, plus **headphone correction**: pick your headphone model from thousands of measurements in the [AutoEQ](https://github.com/jaakkopasanen/AutoEq) project, or import a ParametricEQ.txt file.
 - **Recent apps.** Apps that played before stay in a Recent list until you remove them, so you can set their volume or output before they play again.
 - **Pin and ignore.** Pin an app to keep it listed while it's silent. Ignore an app and AudioLens leaves it completely alone.
+- **Several outputs at once.** Play on the Mac's speakers and an AirPlay HomePod (or any outputs) together. AudioLens holds the faster outputs back to match AirPlay's delay, with a sync slider to fine-tune. Several HomePods join together through Control Center as one AirPlay output.
 - **AirPlay.** HomePods, Apple TVs and other AirPlay speakers on your network are listed with a Connect button. macOS only lets its own Sound settings connect them, so Connect opens Sound settings and shows which speaker to click. Once connected, a speaker is an ordinary output with its own remembered volume and EQ.
 - **Global hotkeys.** Turn the playing app up or down, or mute it, from anywhere (⌃⌥↑, ⌃⌥↓, ⌃⌥M by default).
 - **Choose your layout.** Source List (the default), Mixing Desk, Dial Board or Device Inspector, from Settings or the View menu (⌘1 to ⌘4). Any of them shrinks to the compact panel with ⇧⌘C, and the menu bar icon opens the same compact panel.

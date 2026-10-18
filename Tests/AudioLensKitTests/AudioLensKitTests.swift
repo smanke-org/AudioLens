@@ -173,3 +173,28 @@ import Testing
         #expect(AudioLensKit.percentText(1.45) == "145%")
     }
 }
+
+@Suite struct DelayLineTests {
+    @Test func delaysByTheSetFrames() {
+        let d = DelayLine(maxSeconds: 0.01, sampleRate: 48000)
+        d.delayFrames = 3
+        var l: [Float] = [1, 2, 3, 4, 5, 6], r: [Float] = [1, 2, 3, 4, 5, 6]
+        l.withUnsafeMutableBufferPointer { lp in r.withUnsafeMutableBufferPointer { rp in d.process(left: lp.baseAddress!, right: rp.baseAddress!, frames: 6) } }
+        #expect(l == [0, 0, 0, 1, 2, 3])
+        #expect(r == l)
+    }
+
+    @Test func zeroDelayPassesThrough() {
+        let d = DelayLine(maxSeconds: 0.01)
+        var l: [Float] = [1, 2], r: [Float] = [3, 4]
+        l.withUnsafeMutableBufferPointer { lp in r.withUnsafeMutableBufferPointer { rp in d.process(left: lp.baseAddress!, right: rp.baseAddress!, frames: 2) } }
+        #expect(l == [1, 2] && r == [3, 4])
+    }
+
+    @Test func alignsFasterOutputsToTheSlowest() {
+        // Laptop 700 frames, AirPlay 24000 frames.
+        #expect(DelayLine.alignment(latencies: [700, 24000], extra: 0) == [23300, 0])
+        #expect(DelayLine.alignment(latencies: [700, 24000], extra: 480) == [23780, 0])
+        #expect(DelayLine.alignment(latencies: [700, 24000], extra: -480) == [22820, 480])
+    }
+}

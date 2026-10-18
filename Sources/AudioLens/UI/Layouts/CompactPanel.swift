@@ -77,6 +77,7 @@ struct CompactPanel: View {
 
     private var outputSubtitle: String {
         guard let uid = devices.defaultUID else { return "" }
+        if let group = engine.activeGroup { return "+ " + group.filter { $0.uid != uid }.map(\.name).joined(separator: ", ") }
         let s = store.device(uid)
         var parts: [String] = []
         if s.restoreVolume || s.lockVolume, let v = store.savedVolume(for: uid) { parts.append("Restores at \(percentText(v))") }
@@ -123,6 +124,9 @@ struct CompactPanel: View {
     private var devicesTab: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 6) { OutputGroupControls(compact: true) }
+                    .padding(10)
+                    .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 AirPlayCompactSection()
                 ForEach(knownDeviceUIDs(), id: \.self) { uid in
                     VStack(alignment: .leading, spacing: 6) {

@@ -5,18 +5,28 @@ import Foundation
 
 /// One app's audio, captured and played back through AudioLens:
 ///
-///     app's processes ──tap (muted at the source)──▶ private aggregate device ──▶ output device
-///                                                    └ IOProc: volume, EQ, limiter
+///     app's processes ──tap (muted at the source)──▶ private aggregate device ──▶ output device(s)
+///                                                    └ IOProc: volume, EQ, limiter, sync delay
 ///
 /// The tap mutes the app's own output while AudioLens plays the captured copy, so what you
 /// hear is the processed sound only. Everything here is private to AudioLens: other apps never
 /// see the tap or the aggregate, and both go away if AudioLens quits or crashes.
+///
+/// With several outputs (a group, such as the laptop and an AirPlay HomePod), the aggregate
+/// holds all of them. Each gets its own processor, so each keeps its own EQ, and its own delay:
+/// the slowest output plays as soon as it can and the faster ones are held back to match it.
 @MainActor
 final class TapPipeline {
     let appID: String
     let processObjects: [AudioObjectID]
-    let deviceUID: String
-    let processor = StereoProcessor()
+    /// The outputs, the clock device first.
+    let deviceUIDs: [String]
+    var deviceUID: String { deviceUIDs[0] }
+    let processors: [StereoProcessor]
+    /// For meters: the first output's processor.
+    var processor: StereoProcessor { processors[0] }
+    private let delays: [DelayLine]
+    private let latencies: [Int]
     private(set) var sampleRate: Double = 48000
 
     private var tapID = AudioObjectID(kAudioObjectUnknown)
@@ -36,12 +46,17 @@ final class TapPipeline {
         }
     }
 
-    init(appID: String, name: String, processObjects: [AudioObjectID], device: OutputDevice,
-         volume: Double, muted: Bool, trimDB: Double, chain: (Double) -> EQChain, onRateChange: @escaping @MainActor () -> Void) throws {
+    init(appID: String, name: String, processObjects: [AudioObjectID], devices: [OutputDevice],
+         volume: Double, muted: Bool, trimDB: Double, syncOffsetMs: Double,
+         chain: (OutputDevice, Double) -> EQChain, onRateChange: @escaping @MainActor () -> Void) throws {
+        precondition(!devices.isEmpty)
         self.appID = appID
         self.processObjects = processObjects
-        self.deviceUID = device.uid
-        processor.setVolume(volume, muted: muted, trimDB: trimDB)
+        self.deviceUIDs = devices.map(\.uid)
+        processors = devices.map { _ in StereoProcessor() }
+        delays = devices.map { _ in DelayLine(maxSeconds: 4) }
+        latencies = devices.map { Self.outputLatency($0.objectID) }
+        for p in processors { p.setVolume(volume, muted: muted, trimDB: trimDB) }
 
         // 1. The tap: a stereo mix of the app's processes, muted where they'd normally play.
         let description = CATapDescription(stereoMixdownOfProcesses: processObjects)
@@ -54,23 +69,26 @@ final class TapPipeline {
         guard tapStatus == noErr else { throw PipelineError.tap(tapStatus) }
         tapID = tap
 
-        // 2. A private aggregate device: the output device, with the tap as its input. The
-        // tap's clock follows the app's output device; drift compensation keeps the two in step,
-        // except over Bluetooth, where both already follow the same clock and compensating
-        // only adds a periodic crackle.
+        // 2. A private aggregate device: the output device(s), with the tap as its input. The
+        // first device is the clock; the others, and the tap, are drift-compensated to it,
+        // except the tap over Bluetooth, where both already follow the same clock and
+        // compensating only adds a periodic crackle.
+        let clock = devices[0]
         let aggregateUID = OutputDevices.ownUIDPrefix + "tap." + UUID().uuidString
         let composition: [String: Any] = [
             kAudioAggregateDeviceNameKey: "AudioLens – \(name)",
             kAudioAggregateDeviceUIDKey: aggregateUID,
-            kAudioAggregateDeviceMainSubDeviceKey: device.uid,
-            kAudioAggregateDeviceClockDeviceKey: device.uid,
+            kAudioAggregateDeviceMainSubDeviceKey: clock.uid,
+            kAudioAggregateDeviceClockDeviceKey: clock.uid,
             kAudioAggregateDeviceIsPrivateKey: true,
             kAudioAggregateDeviceIsStackedKey: false,
             kAudioAggregateDeviceTapAutoStartKey: true,
-            kAudioAggregateDeviceSubDeviceListKey: [[kAudioSubDeviceUIDKey: device.uid]],
+            kAudioAggregateDeviceSubDeviceListKey: devices.enumerated().map { index, device in
+                [kAudioSubDeviceUIDKey: device.uid, kAudioSubDeviceDriftCompensationKey: index > 0]
+            },
             kAudioAggregateDeviceTapListKey: [[
                 kAudioSubTapUIDKey: description.uuid.uuidString,
-                kAudioSubTapDriftCompensationKey: !device.isBluetooth,
+                kAudioSubTapDriftCompensationKey: !clock.isBluetooth,
             ]],
         ]
         var aggregate = AudioObjectID(kAudioObjectUnknown)
@@ -82,8 +100,10 @@ final class TapPipeline {
         aggregateID = aggregate
 
         // The aggregate assembles itself asynchronously; wait (briefly) for its streams.
-        let deadline = Date().addingTimeInterval(2)
-        while CA.streamCount(aggregate, kAudioObjectPropertyScopeOutput) == 0 || CA.streamCount(aggregate, kAudioObjectPropertyScopeInput) == 0 {
+        let expectedOutputs = devices.reduce(0) { $0 + max(CA.streamCount($1.objectID, kAudioObjectPropertyScopeOutput), 1) }
+        let deadline = Date().addingTimeInterval(3)
+        while CA.streamCount(aggregate, kAudioObjectPropertyScopeOutput) < min(expectedOutputs, devices.count)
+                || CA.streamCount(aggregate, kAudioObjectPropertyScopeInput) == 0 {
             guard Date() < deadline else {
                 destroy()
                 throw PipelineError.notReady
@@ -91,11 +111,27 @@ final class TapPipeline {
             usleep(10_000)
         }
         sampleRate = CA.nominalSampleRate(aggregate)
-        processor.setChain(chain(sampleRate))
+        for (i, device) in devices.enumerated() { processors[i].setChain(chain(device, sampleRate)) }
+        setSyncOffset(syncOffsetMs)
+
+        // Which of the aggregate's output buffers belong to which device, in sub-device order.
+        var ranges: [Range<Int>] = []
+        var start = 0
+        for device in devices {
+            let count = CA.streamCount(device.objectID, kAudioObjectPropertyScopeOutput)
+            ranges.append(start..<(start + count))
+            start += count
+        }
+        if start != CA.streamCount(aggregate, kAudioObjectPropertyScopeOutput) {
+            // Not the layout expected: everything to the first device's processor, all buffers.
+            ranges = [0..<CA.streamCount(aggregate, kAudioObjectPropertyScopeOutput)]
+            NSLog("AudioLens: output streams didn't line up with the devices; playing one mix to all")
+        }
 
         // 3. The IOProc, on Core Audio's real-time thread.
         var proc: AudioDeviceIOProcID?
-        let procStatus = AudioDeviceCreateIOProcIDWithBlock(&proc, aggregate, nil, Self.ioBlock(processor))
+        let procStatus = AudioDeviceCreateIOProcIDWithBlock(&proc, aggregate, nil,
+                                                            Self.ioBlock(processors: processors, delays: delays, ranges: ranges))
         guard procStatus == noErr, let proc else {
             destroy()
             throw PipelineError.ioProc(procStatus)
@@ -115,12 +151,24 @@ final class TapPipeline {
         rateListener = CA.Listener(aggregate, kAudioDevicePropertyNominalSampleRate) {
             if abs(CA.nominalSampleRate(aggregate) - startRate) > 1 { onRateChange() }
         }
-        NSLog("AudioLens: tapping \(name) (\(processObjects.count) process\(processObjects.count == 1 ? "" : "es")) → \(device.name) at \(Int(sampleRate)) Hz")
+        let names = devices.map(\.name).joined(separator: " + ")
+        NSLog("AudioLens: tapping \(name) (\(processObjects.count) process\(processObjects.count == 1 ? "" : "es")) → \(names) at \(Int(sampleRate)) Hz, delays \(delays.map(\.delayFrames))")
     }
 
-    /// Updates the EQ for the current sample rate.
-    func setChain(_ chain: (Double) -> EQChain) {
-        processor.setChain(chain(sampleRate))
+    func setVolume(_ volume: Double, muted: Bool, trimDB: Double) {
+        for p in processors { p.setVolume(volume, muted: muted, trimDB: trimDB) }
+    }
+
+    /// Updates the EQ of each output for the current sample rate.
+    func setChain(_ chain: (String, Double) -> EQChain) {
+        for (i, uid) in deviceUIDs.enumerated() { processors[i].setChain(chain(uid, sampleRate)) }
+    }
+
+    /// Re-aligns the outputs with the user's fine-tuning, without rebuilding.
+    func setSyncOffset(_ ms: Double) {
+        guard delays.count > 1 else { return }
+        let extra = Int(ms / 1000 * sampleRate)
+        for (i, frames) in DelayLine.alignment(latencies: latencies, extra: extra).enumerated() { delays[i].delayFrames = frames }
     }
 
     func stop() {
@@ -140,7 +188,19 @@ final class TapPipeline {
         tapID = AudioObjectID(kAudioObjectUnknown)
     }
 
-    /// The aggregate's inputs are the output device's own inputs (a headset's microphone,
+    /// How late a device plays what it's given, in frames: its own latency, its safety offset
+    /// and its first output stream's latency. AirPlay reports about half a second here.
+    static func outputLatency(_ device: AudioObjectID) -> Int {
+        let scope = kAudioObjectPropertyScopeOutput
+        var frames = Int(CA.get(device, kAudioDevicePropertyLatency, scope, default: UInt32(0)))
+            + Int(CA.get(device, kAudioDevicePropertySafetyOffset, scope, default: UInt32(0)))
+        if let stream = CA.array(device, kAudioDevicePropertyStreams, scope, of: AudioStreamID.self).first {
+            frames += Int(CA.get(stream, kAudioStreamPropertyLatency, default: UInt32(0)))
+        }
+        return frames
+    }
+
+    /// The aggregate's inputs are the output devices' own inputs (a headset's microphone,
     /// say) followed by the tap. Only the tap is read, so the others are switched off: a
     /// running Bluetooth microphone would drop AirPods into low-quality call mode, and macOS
     /// would count a USB interface's inputs as microphone use.
@@ -163,9 +223,9 @@ final class TapPipeline {
         if status != noErr { NSLog("AudioLens: couldn't switch off the device's own inputs (\(status))") }
     }
 
-    /// The real-time render block. It reads the last input buffer (the tap), processes it,
-    /// and writes the result to the output in whatever layout the device uses.
-    nonisolated private static func ioBlock(_ processor: StereoProcessor) -> AudioDeviceIOBlock {
+    /// The real-time render block. It reads the last input buffer (the tap), and for each
+    /// output device processes it, delays it, and writes it in whatever layout that device uses.
+    nonisolated private static func ioBlock(processors: [StereoProcessor], delays: [DelayLine], ranges: [Range<Int>]) -> AudioDeviceIOBlock {
         return { _, inputData, _, outputData, _ in
             let inputs = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: inputData))
             let outputs = UnsafeMutableAudioBufferListPointer(outputData)
@@ -186,36 +246,42 @@ final class TapPipeline {
                     if available >= frames { source = UnsafePointer(data.assumingMemoryBound(to: Float.self)) }
                 }
             }
-            let done = processor.process(interleaved: source, channels: sourceChannels, frames: frames)
-            let left = processor.left, right = processor.right
-
-            if outChannels >= 2 {
-                // Interleaved: left and right into the first two channels, silence in the rest.
-                guard let out = first.mData?.assumingMemoryBound(to: Float.self) else { return }
-                for i in 0..<frames {
-                    let base = i * outChannels
-                    if i < done {
-                        out[base] = left[i]
-                        out[base + 1] = right[i]
-                    } else {
-                        out[base] = 0; out[base + 1] = 0
-                    }
-                    if outChannels > 2 { for c in 2..<outChannels { out[base + c] = 0 } }
-                }
-                if outputs.count > 1 { for b in 1..<outputs.count { if let d = outputs[b].mData { memset(d, 0, Int(outputs[b].mDataByteSize)) } } }
-            } else if outputs.count >= 2 {
-                // One channel per buffer: left, right, then silence.
-                for b in 0..<outputs.count {
-                    guard let out = outputs[b].mData?.assumingMemoryBound(to: Float.self) else { continue }
-                    let n = min(frames, Int(outputs[b].mDataByteSize) / MemoryLayout<Float>.size)
-                    let src: UnsafeMutablePointer<Float>? = b == 0 ? left : b == 1 ? right : nil
-                    for i in 0..<n { out[i] = (src != nil && i < done) ? src![i] : 0 }
-                }
-            } else {
-                // A mono device: the average of both sides.
-                guard let out = first.mData?.assumingMemoryBound(to: Float.self) else { return }
-                for i in 0..<frames { out[i] = i < done ? (left[i] + right[i]) * 0.5 : 0 }
+            for (k, range) in ranges.enumerated() where k < processors.count && range.upperBound <= outputs.count {
+                let processor = processors[k]
+                let done = processor.process(interleaved: source, channels: sourceChannels, frames: frames)
+                delays[k].process(left: processor.left, right: processor.right, frames: done)
+                write(outputs, range, left: processor.left, right: processor.right, done: done)
             }
+        }
+    }
+
+    /// Writes stereo into one device's buffers: interleaved, one channel per buffer, or mono.
+    nonisolated private static func write(_ outputs: UnsafeMutableAudioBufferListPointer, _ range: Range<Int>,
+                                          left: UnsafeMutablePointer<Float>, right: UnsafeMutablePointer<Float>, done: Int) {
+        guard !range.isEmpty else { return }
+        let first = outputs[range.lowerBound]
+        let channels = max(Int(first.mNumberChannels), 1)
+        if channels >= 2 {
+            guard let out = first.mData?.assumingMemoryBound(to: Float.self) else { return }
+            let frames = Int(first.mDataByteSize) / (MemoryLayout<Float>.size * channels)
+            for i in 0..<frames {
+                let base = i * channels
+                out[base] = i < done ? left[i] : 0
+                out[base + 1] = i < done ? right[i] : 0
+                if channels > 2 { for c in 2..<channels { out[base + c] = 0 } }
+            }
+            for b in range.dropFirst() { if let d = outputs[b].mData { memset(d, 0, Int(outputs[b].mDataByteSize)) } }
+        } else if range.count >= 2 {
+            for (n, b) in range.enumerated() {
+                guard let out = outputs[b].mData?.assumingMemoryBound(to: Float.self) else { continue }
+                let frames = Int(outputs[b].mDataByteSize) / MemoryLayout<Float>.size
+                let src: UnsafeMutablePointer<Float>? = n == 0 ? left : n == 1 ? right : nil
+                for i in 0..<frames { out[i] = (src != nil && i < done) ? src![i] : 0 }
+            }
+        } else {
+            guard let out = first.mData?.assumingMemoryBound(to: Float.self) else { return }
+            let frames = Int(first.mDataByteSize) / MemoryLayout<Float>.size
+            for i in 0..<frames { out[i] = i < done ? (left[i] + right[i]) * 0.5 : 0 }
         }
     }
 }
