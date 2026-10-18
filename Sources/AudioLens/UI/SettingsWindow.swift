@@ -143,7 +143,7 @@ struct GeneralSettings: View {
             }
             Section("Apps list") {
                 Toggle("Show pinned apps when they're silent", isOn: $store.showPinnedWhenSilent)
-                Toggle("Allow volume boost up to 200%", isOn: $store.allowBoost)
+                Toggle("Allow volume boost up to 150%", isOn: $store.allowBoost)
                 if store.allowBoost {
                     Text("A limiter keeps boosted audio from distorting.").font(.callout).foregroundStyle(.secondary)
                 }

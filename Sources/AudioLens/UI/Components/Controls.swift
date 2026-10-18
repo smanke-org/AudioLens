@@ -66,7 +66,7 @@ enum LevelStyle {
 /// range allows boost.
 struct LevelSlider: View {
     @Binding var value: Double
-    var range: ClosedRange<Double> = 0...2
+    var range: ClosedRange<Double> = 0...AppAudioSettings.maxBoost
     var thick = false
     var label: String
 
@@ -125,7 +125,7 @@ struct LevelSlider: View {
 /// A vertical fader for the mixing desk and the EQ bands.
 struct VerticalFader: View {
     @Binding var value: Double
-    var range: ClosedRange<Double> = 0...2
+    var range: ClosedRange<Double> = 0...AppAudioSettings.maxBoost
     /// The value drawn as a line across the track: 100% for volume, 0 dB for EQ.
     var reference: Double? = 1
     var small = false
@@ -186,10 +186,10 @@ struct VerticalFader: View {
     }
 }
 
-/// A rotary dial: drag up or down to turn it. 100% sits at the top.
+/// A rotary dial: drag up or down to turn it.
 struct VolumeKnob: View {
     @Binding var value: Double
-    var range: ClosedRange<Double> = 0...2
+    var range: ClosedRange<Double> = 0...AppAudioSettings.maxBoost
     var label: String
     var size: CGFloat = 100
 

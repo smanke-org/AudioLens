@@ -24,7 +24,7 @@ public struct AppAudioSettings: Codable, Equatable, Sendable {
         self.name = name
     }
 
-    public static let maxBoost = 2.0
+    public static let maxBoost = 1.5
 
     /// Whether anything differs from how the app sounds without AudioLens.
     public var changesSound: Bool {

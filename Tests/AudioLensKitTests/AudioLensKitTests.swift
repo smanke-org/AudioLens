@@ -77,8 +77,8 @@ import Testing
 
     @Test func boostIsLimitedBelowFullScale() {
         let p = StereoProcessor()
-        p.setVolume(2, muted: false)
-        let input = sine(frames: 4096, frequency: 220, amplitude: 0.9)
+        p.setVolume(AppAudioSettings.maxBoost, muted: false)
+        let input = sine(frames: 4096, frequency: 220, amplitude: 0.95)
         input.withUnsafeBufferPointer { _ = p.process(interleaved: $0.baseAddress, channels: 2, frames: 4096) }
         #expect((0..<4096).allSatisfy { abs(p.left[$0]) <= 1 })
         #expect(p.takePeak() > 0.9)
@@ -155,7 +155,7 @@ import Testing
     @Test func decodesLooselyAndClamps() throws {
         let json = #"{"volume": 9, "pinned": true, "extra": 1}"#
         let s = try JSONDecoder().decode(AppAudioSettings.self, from: Data(json.utf8))
-        #expect(s.volume == 2 && s.pinned && !s.muted)
+        #expect(s.volume == 1.5 && s.pinned && !s.muted)
         let d = try JSONDecoder().decode(DeviceSettings.self, from: Data(#"{"eqGains":[1,2]}"#.utf8))
         #expect(d.eqGains == EQPreset.flat.gains && d.restoreVolume)
     }

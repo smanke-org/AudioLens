@@ -60,8 +60,8 @@ public final class StereoProcessor: @unchecked Sendable {
         right.deallocate()
     }
 
-    /// The slider position, 0…2, as an amplitude. Loudness doubles for roughly every 10 dB,
-    /// so 50% sounds about half as loud and 200% about twice as loud.
+    /// The slider position, 0…1.5, as an amplitude. Loudness doubles for roughly every 10 dB,
+    /// so 50% sounds about half as loud and 150% about one and a half times as loud.
     public static func amplitude(forVolume volume: Double) -> Float {
         guard volume > 0 else { return 0 }
         return Float(pow(volume, 1.66))

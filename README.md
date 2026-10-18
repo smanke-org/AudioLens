@@ -2,7 +2,7 @@
 
 **Set each app's volume separately from your Mac's volume, and give every output device its own remembered volume and EQ.**
 
-macOS has one volume for everything. A video call ends up as loud as the music behind it, a notification blasts through your headphones, and switching from AirPods to a HomePod leaves you hunting for the right level again. AudioLens gives every app that's playing its own slider (up to 200%), sends any app to the speaker or headphones you choose, and remembers each device's volume and EQ so they come back the moment it connects.
+macOS has one volume for everything. A video call ends up as loud as the music behind it, a notification blasts through your headphones, and switching from AirPods to a HomePod leaves you hunting for the right level again. AudioLens gives every app that's playing its own slider (up to 150%), sends any app to the speaker or headphones you choose, and remembers each device's volume and EQ so they come back the moment it connects.
 
 ## Download
 
@@ -16,7 +16,7 @@ Requires macOS 26 or later.
 
 ## What it does
 
-- **Per-app volume.** Every app that's playing gets a slider, from silent to 200%. A soft limiter keeps boosted audio from distorting. Volumes are remembered across restarts.
+- **Per-app volume.** Every app that's playing gets a slider, from silent to 150%. A soft limiter keeps boosted audio from distorting. Volumes are remembered across restarts.
 - **Per-app output.** Send an app to a different device than the system output, for example a call to your AirPods while music plays on the speakers.
 - **Device memory.** Each output device (speakers, headphones, AirPods, HomePods, displays) keeps its own volume on each Mac. When it becomes the output again, AudioLens puts the volume back. Lock a device to keep it at that level.
 - **Equalizer per device.** A 10-band EQ with presets for each output device, plus **headphone correction**: pick your headphone model from thousands of measurements in the [AutoEQ](https://github.com/jaakkopasanen/AutoEq) project, or import a ParametricEQ.txt file.

@@ -72,7 +72,7 @@ struct ChannelStrip: View {
             Text(app.name).font(.callout.weight(.medium)).lineLimit(1).frame(width: 92)
             RoutePicker(app: app, compact: true).frame(maxWidth: 96)
             HStack(spacing: 8) {
-                FaderScale(labels: store.allowBoost ? ["200", "100", "0"] : ["100", "50", "0"])
+                FaderScale(values: store.allowBoost ? [1.5, 1, 0.5, 0] : [1, 0.5, 0], top: store.maxVolume)
                 VerticalFader(value: bind.volume, range: 0...store.maxVolume, reference: store.allowBoost ? 1 : nil,
                               label: "\(app.name) volume")
                     .frame(width: 30)
@@ -94,15 +94,19 @@ struct ChannelStrip: View {
     }
 }
 
+/// Percent marks beside a fader, each at its value's height.
 struct FaderScale: View {
-    let labels: [String]
+    let values: [Double]
+    let top: Double
+
     var body: some View {
-        VStack {
-            ForEach(Array(labels.enumerated()), id: \.offset) { i, label in
-                if i > 0 { Spacer() }
-                Text(label)
+        GeometryReader { geo in
+            ForEach(values, id: \.self) { v in
+                Text("\(Int((v * 100).rounded()))")
+                    .position(x: geo.size.width / 2, y: geo.size.height * (1 - v / top))
             }
         }
+        .frame(width: 22)
         .font(.system(size: 9)).monospacedDigit().foregroundStyle(.tertiary)
     }
 }
@@ -142,7 +146,7 @@ struct MasterStrip: View {
                 Text(device.name).font(.callout.weight(.medium)).lineLimit(1).frame(width: 130)
                 OutputMenu().controlSize(.mini)
                 HStack(spacing: 8) {
-                    FaderScale(labels: ["100", "50", "0"])
+                    FaderScale(values: [1, 0.5, 0], top: 1)
                     VerticalFader(value: volume, range: 0...1, reference: nil, label: "\(device.name) volume").frame(width: 30)
                 }
                 .frame(height: 220)
