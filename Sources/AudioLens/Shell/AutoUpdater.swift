@@ -271,7 +271,7 @@ final class AutoUpdater: NSObject, UNUserNotificationCenterDelegate {
         guard let from = UserDefaults.standard.string(forKey: Self.installedFromKey) else { return }
         UserDefaults.standard.removeObject(forKey: Self.installedFromKey)
         guard from != AppInfo.version else { return }
-        notify(id: "updated-\(AppInfo.version)", title: "AudioLens updated to \(AppInfo.version)",
+        notify(id: "updated-\(AppInfo.version)", title: "AudioLens updated to \(AppInfo.labeledVersion)",
                body: "It installed itself while your Mac wasn't in use.", installable: false)
     }
 
@@ -279,7 +279,7 @@ final class AutoUpdater: NSObject, UNUserNotificationCenterDelegate {
         guard UserDefaults.standard.string(forKey: Self.notifiedVersionKey) != version else { return }
         UserDefaults.standard.set(version, forKey: Self.notifiedVersionKey)
         notify(id: "available-\(version)", title: "AudioLens \(version) is available",
-               body: "Click to review and install it. You're on \(AppInfo.version).", installable: true)
+               body: "Click to review and install it. You're on \(AppInfo.labeledVersion).", installable: true)
     }
 
     private func notify(id: String, title: String, body: String, installable: Bool) {

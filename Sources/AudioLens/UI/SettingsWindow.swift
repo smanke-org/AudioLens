@@ -119,6 +119,15 @@ struct GeneralSettings: View {
                 Text("Also in the View menu (⌘1 to ⌘4). Press ⇧⌘C in any layout to shrink to the compact panel. The layout is saved for this Mac only.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section {
+                Picker("Appearance", selection: $store.appearance) {
+                    ForEach(SettingsStore.Appearance.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+            } footer: {
+                Text("Light or Dark keeps AudioLens that way whatever the system uses; System follows your Mac.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Where AudioLens appears") {
                 Toggle("Show in Dock", isOn: $presence.showInDock)
                 Toggle("Show in menu bar", isOn: $presence.showInMenuBar)
@@ -171,10 +180,7 @@ struct GeneralSettings: View {
             Section {
                 LabeledContent("About") {
                     HStack {
-                        Button("About AudioLens") {
-                            NSApp.activate(ignoringOtherApps: true)
-                            NSApp.orderFrontStandardAboutPanel(nil)
-                        }
+                        Button("About AudioLens") { AppInfo.showAbout() }
                         Button("Our other apps…") {
                             if let url = URL(string: "https://stevemanke.com/") { NSWorkspace.shared.open(url) }
                         }

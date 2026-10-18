@@ -127,8 +127,9 @@ enum UpdateController {
 
     /// Numeric component comparison, so 1.1.10 is correctly newer than 1.1.9.
     static func isNewer(_ candidate: String, than current: String) -> Bool {
-        let a = candidate.split(separator: ".").map { Int($0) ?? 0 }
-        let b = current.split(separator: ".").map { Int($0) ?? 0 }
+        // Leading digits of each part, so a stray suffix ("4-beta") still counts as 4.
+        func parts(_ s: String) -> [Int] { s.split(separator: ".").map { Int($0.prefix { $0.isNumber }) ?? 0 } }
+        let a = parts(candidate), b = parts(current)
         for index in 0..<max(a.count, b.count) {
             let left = index < a.count ? a[index] : 0
             let right = index < b.count ? b[index] : 0

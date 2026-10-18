@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = makeMainMenu()
+        SettingsStore.shared.applyAppearance()
 
         // Set at the end of the first launch, so its absence means a brand-new install.
         let newInstall = !UserDefaults.standard.bool(forKey: "launchedBefore")
@@ -330,7 +331,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc func showAbout() {
-        NSApp.activate(ignoringOtherApps: true)
-        NSApp.orderFrontStandardAboutPanel(nil)
+        AppInfo.showAbout()
     }
 }

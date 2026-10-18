@@ -1,3 +1,4 @@
+import AppKit
 import AudioLensKit
 import CoreAudio
 import Foundation
@@ -20,6 +21,7 @@ final class SettingsStore {
         static let allowBoost = "allowBoost"
         static let showPinned = "showPinnedWhenSilent"
         static let showMeters = "showMeters"
+        static let appearance = "appearance"
         static let volumeStep = "volumeStep"
         static let hotKeyUp = "hotKey.volumeUp"
         static let hotKeyDown = "hotKey.volumeDown"
@@ -37,7 +39,7 @@ final class SettingsStore {
     }
 
     /// Settings that follow the user between Macs.
-    static let syncedKeys = [Key.apps, Key.devices, Key.allowBoost, Key.showPinned, Key.showMeters, Key.carryLevel,
+    static let syncedKeys = [Key.apps, Key.devices, Key.allowBoost, Key.showPinned, Key.showMeters, Key.carryLevel, Key.appearance,
                              Key.volumeStep, Key.hotKeyUp, Key.hotKeyDown, Key.hotKeyMute]
 
     private(set) var apps: [String: AppAudioSettings] = [:]
@@ -54,6 +56,38 @@ final class SettingsStore {
     var allowBoost = true { didSet { save(allowBoost, Key.allowBoost, oldValue != allowBoost); if !allowBoost { capBoosts() } } }
     var showPinnedWhenSilent = true { didSet { save(showPinnedWhenSilent, Key.showPinned, oldValue != showPinnedWhenSilent) } }
     var showMeters = true { didSet { save(showMeters, Key.showMeters, oldValue != showMeters) } }
+
+    /// Light or dark for AudioLens alone, or following the system.
+    enum Appearance: String, CaseIterable, Identifiable {
+        case system, light, dark
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .system: "System"
+            case .light: "Light"
+            case .dark: "Dark"
+            }
+        }
+        var nsAppearance: NSAppearance? {
+            switch self {
+            case .system: nil
+            case .light: NSAppearance(named: .aqua)
+            case .dark: NSAppearance(named: .darkAqua)
+            }
+        }
+    }
+
+    var appearance = Appearance.system {
+        didSet {
+            save(appearance.rawValue, Key.appearance, oldValue != appearance)
+            applyAppearance()
+        }
+    }
+
+    /// Every AudioLens window, the menu bar panel and the volume HUD follow it.
+    func applyAppearance() {
+        NSApp.appearance = appearance.nsAppearance
+    }
     /// Keep the device's own volume at the loudest adjusted app's level, so quitting AudioLens
     /// doesn't make apps jump louder.
     var carryLevelInDeviceVolume = true {
@@ -98,6 +132,7 @@ final class SettingsStore {
         allowBoost = defaults.object(forKey: Key.allowBoost) as? Bool ?? true
         showPinnedWhenSilent = defaults.object(forKey: Key.showPinned) as? Bool ?? true
         showMeters = defaults.object(forKey: Key.showMeters) as? Bool ?? true
+        appearance = defaults.string(forKey: Key.appearance).flatMap(Appearance.init) ?? .system
         carryLevelInDeviceVolume = defaults.object(forKey: Key.carryLevel) as? Bool ?? true
         volumeStep = min(max(defaults.object(forKey: Key.volumeStep) as? Double ?? 0.05, 0.01), 0.25)
         hotKeyUp = shortcut(Key.hotKeyUp, default: Self.defaultUp)
@@ -121,7 +156,7 @@ final class SettingsStore {
         return [
             Key.apps: data(apps.filter { !$0.key.hasPrefix("pid:") }), Key.devices: data(devices), Key.allowBoost: allowBoost,
             Key.showPinned: showPinnedWhenSilent, Key.showMeters: showMeters, Key.volumeStep: volumeStep,
-            Key.carryLevel: carryLevelInDeviceVolume,
+            Key.carryLevel: carryLevelInDeviceVolume, Key.appearance: appearance.rawValue,
             Key.hotKeyUp: hotKeyUp.map(data) ?? Data(), Key.hotKeyDown: hotKeyDown.map(data) ?? Data(),
             Key.hotKeyMute: hotKeyMute.map(data) ?? Data(),
         ]
