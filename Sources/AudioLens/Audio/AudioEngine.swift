@@ -89,6 +89,8 @@ final class AudioEngine {
                     "taps": taps, "failures": engine.failures,
                     "output": OutputDevices.shared.defaultUID ?? "", "outputVolume": OutputDevices.shared.volume ?? -1,
                     "trimDB": OutputDevices.shared.trimDB,
+                    "airplayChecked": AirPlaySpeakers.shared.checked, "airplayError": AirPlaySpeakers.shared.lastError ?? "",
+                    "devices": OutputDevices.shared.devices.map(\.name),
                     "hardwareVolume": OutputDevices.volume(of: CA.defaultOutputDevice()) ?? -1,
                 ]
                 if let data = try? JSONSerialization.data(withJSONObject: status, options: [.prettyPrinted, .sortedKeys]) {

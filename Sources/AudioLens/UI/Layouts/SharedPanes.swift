@@ -108,16 +108,10 @@ struct DevicesPane: View {
                 }
             }
             let groups = AirPlayBrowser.shared.groupedForList
+            Section("AirPlay Speakers") { AirPlayHeaderNote() }
             ForEach(groups, id: \.kind) { group in
-                Section {
+                Section("AirPlay · \(group.kind.title)") {
                     ForEach(group.speakers) { AirPlaySpeakerRow(speaker: $0) }
-                } header: {
-                    Text("AirPlay · \(group.kind.title)")
-                } footer: {
-                    if group.kind == groups.last?.kind {
-                        Text("Connect opens Sound settings, where one click makes the speaker your Mac's output; macOS doesn't let other apps connect AirPlay speakers themselves. Once connected, AudioLens remembers its volume and EQ.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
                 }
             }
             Section {

@@ -1,4 +1,5 @@
 import AppKit
+import CoreAudio
 import Network
 import Observation
 import SwiftUI
@@ -193,13 +194,18 @@ struct AirPlayIcon: View {
 
     var body: some View {
         Menu {
-            let speakers = browser.unconnected
+            let speakers = browser.speakers
+            let control = AirPlaySpeakers.shared
             if speakers.isEmpty {
                 Text(browser.denied ? "Allow Local Network access for AudioLens to see AirPlay speakers" : "Looking for AirPlay speakers…")
             } else {
-                Section("Connect an AirPlay speaker") {
+                Section(control.isTrusted ? "Play on an AirPlay speaker" : "Connect an AirPlay speaker") {
                     ForEach(speakers) { speaker in
-                        Button { browser.connect(speaker.name) } label: { Label(speaker.name, systemImage: speaker.symbol) }
+                        Button {
+                            if control.isTrusted { control.select(control.isOn(speaker.name) ? nil : speaker.name) } else { browser.connect(speaker.name) }
+                        } label: {
+                            Label(speaker.name, systemImage: control.isTrusted && control.isOn(speaker.name) ? "checkmark" : speaker.symbol)
+                        }
                     }
                 }
             }
@@ -240,29 +246,108 @@ struct AirPlayConnectButton: View {
 }
 
 extension AirPlayBrowser {
-    /// Speakers that aren't connected and aren't already listed as remembered devices, grouped
-    /// by kind in display order: HomePods, Apple TVs, TVs, other speakers, then Macs.
+    /// Every speaker on the network, grouped by kind in display order: HomePods, Apple TVs,
+    /// TVs, other speakers, then Macs.
     var groupedForList: [(kind: AirPlaySpeaker.Kind, speakers: [AirPlaySpeaker])] {
-        let remembered = Set(SettingsStore.shared.devices.values.compactMap { $0.airPlay ? $0.name : nil })
-        let others = unconnected.filter { !remembered.contains($0.name) }
-        return Dictionary(grouping: others, by: \.kind).sorted { $0.key < $1.key }.map { ($0.key, $0.value) }
+        Dictionary(grouping: speakers, by: \.kind).sorted { $0.key < $1.key }.map { ($0.key, $0.value) }
     }
 }
 
-/// One AirPlay speaker that isn't connected.
+extension AirPlaySpeakers {
+    /// Whether macOS is playing to the speaker. Known exactly after AudioLens has looked in
+    /// Control Center; otherwise worked out from the AirPlay output AudioLens named.
+    func isOn(_ name: String) -> Bool {
+        if let value = checked[name] { return value }
+        guard let airPlay = OutputDevices.shared.devices.first(where: { $0.transport == kAudioDeviceTransportTypeAirPlay }) else { return false }
+        return airPlay.name.components(separatedBy: " + ").contains(name)
+    }
+
+    /// Whether Control Center offers the speaker (Apple TVs, for example, may not be).
+    func isOffered(_ name: String) -> Bool { order.isEmpty || order.contains(name) }
+}
+
+/// One AirPlay speaker: a checkbox that adds it to or removes it from what macOS plays to.
 struct AirPlaySpeakerRow: View {
     let speaker: AirPlaySpeaker
     var compact = false
+    @State private var speakers = AirPlaySpeakers.shared
 
     var body: some View {
         HStack(spacing: compact ? 8 : 10) {
-            DeviceBadge(symbol: speaker.symbol, size: compact ? 22 : 28)
-            Text(speaker.name).lineLimit(1).truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .layoutPriority(-1)
-            AirPlayConnectButton(name: speaker.name, iconOnly: compact)
+            DeviceBadge(symbol: speaker.symbol, active: speakers.isOn(speaker.name), size: compact ? 22 : 28)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(speaker.name).lineLimit(1).truncationMode(.tail)
+                if !compact, speakers.isOn(speaker.name) {
+                    Text("Playing").font(.caption).foregroundStyle(Color.accentColor)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(-1)
+            if speakers.isTrusted {
+                let on = speakers.isOn(speaker.name)
+                Button {
+                    speakers.select(on ? nil : speaker.name)
+                } label: {
+                    Image(systemName: on ? "largecircle.fill.circle" : "circle")
+                        .font(.system(size: 15))
+                        .foregroundStyle(on ? Color.accentColor : Color.secondary)
+                }
+                .buttonStyle(.borderless)
+                .disabled(speakers.working)
+                .help(on ? "Stop playing on \(speaker.name)" : "Play on \(speaker.name) instead")
+                .accessibilityLabel("Play on \(speaker.name)")
+                .accessibilityAddTraits(on ? [.isSelected] : [])
+            } else {
+                AirPlayConnectButton(name: speaker.name, iconOnly: compact)
+            }
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+/// Above the speakers: what this does, a refresh, and the Accessibility request if needed.
+struct AirPlayHeaderNote: View {
+    @State private var speakers = AirPlaySpeakers.shared
+
+    var body: some View {
+        if !speakers.isTrusted {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("To pick the AirPlay speaker right here, allow AudioLens under Privacy & Security › Accessibility. Without it, Connect opens Sound settings.")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Button("Allow…") { speakers.requestTrust() }
+                    Button("Open Accessibility Settings") { speakers.openAccessibilitySettings() }
+                }
+                .controlSize(.small)
+            }
+        } else {
+            HStack(spacing: 8) {
+                if speakers.working {
+                    ProgressView().controlSize(.small)
+                    Text("Changing speakers in Control Center…").font(.caption).foregroundStyle(.secondary)
+                } else if let error = speakers.lastError {
+                    Label(error, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange)
+                } else {
+                    Text("macOS plays to one AirPlay speaker at a time; pick it here. To add the Mac's own speakers or another output, use Play on several outputs. Control Center opens for a moment while AudioLens switches.")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                if speakers.current != nil || OutputDevices.shared.devices.contains(where: { $0.transport == kAudioDeviceTransportTypeAirPlay }) {
+                    Button("Turn Off") { speakers.select(nil) }
+                        .controlSize(.small)
+                        .disabled(speakers.working)
+                        .help("Stop AirPlay and go back to the Mac's own output")
+                }
+                Button {
+                    speakers.refresh()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+                .disabled(speakers.working)
+                .help("Check which speakers are on in Control Center")
+            }
+        }
     }
 }
 
@@ -273,10 +358,11 @@ struct AirPlaySpeakerRows: View {
 
     var body: some View {
         let groups = browser.groupedForList
+        AirPlayHeaderNote()
         ForEach(groups, id: \.kind) { group in
             Text(group.kind.title.uppercased())
                 .font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
-                .padding(.top, group.kind == groups.first?.kind ? 0 : 6)
+                .padding(.top, 6)
                 .accessibilityAddTraits(.isHeader)
             ForEach(group.speakers) { AirPlaySpeakerRow(speaker: $0, compact: compact) }
         }

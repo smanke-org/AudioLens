@@ -36,6 +36,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if DebugHooks.run() { return }
         #endif
 
+        // Testing: AUDIOLENS_AIRPLAY_SELECT="Bathroom" (or "-" for off, "?" to just read).
+        if let name = ProcessInfo.processInfo.environment["AUDIOLENS_AIRPLAY_SELECT"] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                switch name {
+                case "?": AirPlaySpeakers.shared.refresh()
+                case "-": AirPlaySpeakers.shared.select(nil)
+                default: AirPlaySpeakers.shared.select(name)
+                }
+            }
+        }
         AutoUpdater.shared.start()
         UserDefaults.standard.set(true, forKey: "launchedBefore")
         // At login, AudioLens starts quietly in the background unless it has no icon to click.
