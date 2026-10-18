@@ -62,6 +62,7 @@ final class MultiRoomStream {
         player.replaceCurrentItem(with: AVPlayerItem(asset: asset))
         player.automaticallyWaitsToMinimizeStalling = false
         player.play()
+        routeMayChange()
         meter = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
             MainActor.assumeIsolated { MultiRoomStream.shared.measure() }
         }
@@ -106,21 +107,57 @@ final class MultiRoomStream {
     /// Whether the player is on AirPlay speakers rather than the Mac.
     private(set) var onAirPlay = false
 
+    /// Every second: where the player plays, and how far behind live, read in the background.
+    ///
+    /// Nothing about the player is read on the main thread: while it renegotiates AirPlay
+    /// speakers, even its position waits on its internal queue, and that froze AudioLens for
+    /// 9 seconds when AirPlay Macs were added. A reading still waiting is never doubled up.
     private func measure() {
+        guard running, !reading else { return }
+        reading = true
+        nonisolated(unsafe) let player = self.player
+        readQueue.async {
+            let playing = player.currentTime().seconds
+            let rate = player.rate
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { MultiRoomStream.shared.took(playing: playing, rate: rate) }
+            }
+        }
+    }
+
+    @ObservationIgnored private var reading = false
+    @ObservationIgnored private let readQueue = DispatchQueue(label: "AudioLens.multiroom.read")
+    /// Until when a change of route is believed: the route only changes through the picker,
+    /// so a "local" reading at other times (seen mid-renegotiation) is ignored.
+    @ObservationIgnored private var routeCheckUntil = Date.distantPast
+    @ObservationIgnored private var localReadings = 0
+
+    /// The picker was just used (or the stream started): the route may change for a while.
+    func routeMayChange() {
+        routeCheckUntil = Date().addingTimeInterval(30)
+    }
+
+    private func took(playing: Double, rate: Float) {
+        reading = false
         guard running else { return }
         // The player is never muted: a mute set while it played locally stayed on the HomePods
         // after switching. Instead, while it plays on the Mac, the Mac's direct sound is off.
-        let external = !playerIsLocal()
-        if external != onAirPlay {
-            onAirPlay = external
-            if external { airPlaySince = Date() }
-            delay = nil
-            NSLog("AudioLens: multi-room player is \(external ? "on AirPlay" : "on the Mac")")
-            apply()
-            AudioEngine.shared.streamDelayChanged()
+        if Date() < routeCheckUntil {
+            let local = playerIsLocal()
+            localReadings = local ? localReadings + 1 : 0
+            let external = onAirPlay ? localReadings < 3 : !local
+            if external != onAirPlay {
+                onAirPlay = external
+                if external { airPlaySince = Date() }
+                delay = nil
+                NSLog("AudioLens: multi-room player is \(external ? "on AirPlay" : "on the Mac")")
+                apply()
+                AudioEngine.shared.streamDelayChanged()
+            }
         }
-        let playing = player.currentTime().seconds
-        if ProcessInfo.processInfo.environment["AUDIOLENS_LOG_STREAM"] != nil { NSLog("AudioLens: multi-room status=\(player.timeControlStatus.rawValue) reason=\(player.reasonForWaitingToPlay?.rawValue ?? "-") time=\(String(format: "%.2f", playing)) produced=\(String(format: "%.2f", core.producedSeconds)) rate=\(player.rate) likely=\(player.currentItem?.isPlaybackLikelyToKeepUp ?? false) buffered=\(player.currentItem?.loadedTimeRanges.last.map { String(format: "%.1f", CMTimeRangeGetEnd($0.timeRangeValue).seconds) } ?? "-")") }
+        if ProcessInfo.processInfo.environment["AUDIOLENS_LOG_STREAM"] != nil {
+            NSLog("AudioLens: multi-room time=\(String(format: "%.2f", playing)) produced=\(String(format: "%.2f", core.producedSeconds)) rate=\(rate) airplay=\(onAirPlay)")
+        }
         guard playing.isFinite, playing > 0.5 else { return }
         let measured = core.producedSeconds - playing + core.mixerLag
         guard measured > 0, measured < 15 else { return }
@@ -128,11 +165,12 @@ final class MultiRoomStream {
         // testing) and never catches up on its own, leaving the speakers 10 s behind the apps.
         // Once it's been steady on AirPlay for a while, jump it forward to near live.
         if onAirPlay, measured > Self.targetDelay + 1.5, Date().timeIntervalSince(lastCatchUp) > 20,
-           Date().timeIntervalSince(airPlaySince) > 6, player.rate > 0 {
+           Date().timeIntervalSince(airPlaySince) > 6, rate > 0 {
             lastCatchUp = Date()
             let target = CMTime(seconds: core.producedSeconds - Self.targetDelay + core.mixerLag, preferredTimescale: 48000)
             NSLog("AudioLens: multi-room catching up from \(String(format: "%.1f", measured)) s behind")
-            player.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero)
+            nonisolated(unsafe) let player = self.player
+            readQueue.async { player.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero) }
             delay = nil
             return
         }
@@ -326,13 +364,26 @@ final class StreamCore: NSObject, AVAssetResourceLoaderDelegate, @unchecked Send
 
 /// Apple's AirPlay picker for the multi-room stream: check any number of speakers.
 struct MultiRoomPicker: NSViewRepresentable {
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
     func makeNSView(context: Context) -> AVRoutePickerView {
         let picker = AVRoutePickerView()
         picker.player = MultiRoomStream.shared.player
         picker.isRoutePickerButtonBordered = true
+        picker.delegate = context.coordinator
         return picker
     }
     func updateNSView(_ nsView: AVRoutePickerView, context: Context) {}
+
+    /// Using the picker is the only way the stream's speakers change; tell the stream.
+    final class Coordinator: NSObject, AVRoutePickerViewDelegate {
+        func routePickerViewWillBeginPresentingRoutes(_ routePickerView: AVRoutePickerView) {
+            MainActor.assumeIsolated { MultiRoomStream.shared.routeMayChange() }
+        }
+        func routePickerViewDidEndPresentingRoutes(_ routePickerView: AVRoutePickerView) {
+            MainActor.assumeIsolated { MultiRoomStream.shared.routeMayChange() }
+        }
+    }
 }
 
 /// The Multi-room AirPlay switch, speakers, the Mac's own speakers, delay and sync.
@@ -352,15 +403,18 @@ struct MultiRoomControls: View {
         }
         .controlSize(compact ? .small : .regular)
         if store.multiRoom.enabled {
-            LabeledContent("Speakers") {
+            LabeledContent {
                 HStack(spacing: 6) {
                     MultiRoomPicker().frame(width: 34, height: 26)
                     Text("Check every speaker to play on").font(.caption).foregroundStyle(.secondary)
                 }
+            } label: {
+                Text("Speakers")
+                Text("Leave “\(Self.macName)” unchecked there: Apple's list plays this Mac instead of the others. Use the switch below to add it.")
             }
             Toggle(isOn: Binding(get: { store.multiRoom.includeMac }, set: { store.multiRoom.includeMac = $0 })) {
-                Text("This Mac's speakers (\(engine.macOutput?.name ?? "this Mac"))")
-                Text("Apple's list can't include this Mac, so it's here. Kept in sync with the AirPlay speakers.")
+                Text("Also play on \(Self.macName) (\(engine.macOutput?.name ?? "its speakers"))")
+                Text("Plays here alongside the speakers above, kept in sync.")
             }
             if store.multiRoom.includeMac {
                 LabeledContent {
@@ -380,6 +434,9 @@ struct MultiRoomControls: View {
             Text(statusLine).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
     }
+
+    /// This Mac as AirPlay names it ("Steve's M5 Max").
+    static var macName: String { Host.current().localizedName ?? "this Mac" }
 
     private var statusLine: String {
         let delay = stream.delay.map { String(format: "%.1f", $0) }
