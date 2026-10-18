@@ -33,10 +33,11 @@ struct MixingDeskLayout: View {
 
     private var mixer: some View {
         let apps = engine.visibleApps
+        let recent = engine.recentApps
         return VStack(spacing: 0) {
             PermissionBanner().padding(.horizontal, 16).padding(.top, 8)
             HStack(alignment: .top, spacing: 0) {
-                if apps.isEmpty {
+                if apps.isEmpty && recent.isEmpty {
                     EmptyAppsView()
                 } else {
                     ScrollView(.horizontal) {
@@ -44,6 +45,14 @@ struct MixingDeskLayout: View {
                             ForEach(apps) { app in
                                 ChannelStrip(app: app)
                                 Divider()
+                            }
+                            if !recent.isEmpty {
+                                Text("RECENT").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                                    .rotationEffect(.degrees(-90)).fixedSize().frame(width: 18).frame(maxHeight: .infinity)
+                                ForEach(recent) { app in
+                                    ChannelStrip(app: app, recent: true)
+                                    Divider()
+                                }
                             }
                         }
                         .padding(.vertical, 14).padding(.leading, 8)
@@ -61,6 +70,7 @@ struct MixingDeskLayout: View {
 /// One app's strip: icon, name, output, fader with meter, value, mute and pin.
 struct ChannelStrip: View {
     let app: AudioApp
+    var recent = false
     @State private var store = SettingsStore.shared
     @State private var engine = AudioEngine.shared
 
@@ -84,6 +94,7 @@ struct ChannelStrip: View {
             HStack(spacing: 4) {
                 StripButton(title: "M", on: s.muted, tint: .red, help: s.muted ? "Unmute" : "Mute") { bind.muted.wrappedValue.toggle() }
                 StripButton(title: "P", on: s.pinned, tint: .accentColor, help: s.pinned ? "Unpin" : "Pin (keep listed when silent)") { bind.togglePin() }
+                if recent { RemoveRecentButton(app: app) }
             }
             FailureNote(app: app).frame(width: 96)
         }
@@ -144,7 +155,10 @@ struct MasterStrip: View {
                 let volume = Binding<Double>(get: { devices.volume ?? 0 }, set: { devices.setSystemVolume($0) })
                 DeviceBadge(symbol: device.symbol, active: true, size: 40)
                 Text(device.name).font(.callout.weight(.medium)).lineLimit(1).frame(width: 130)
-                OutputMenu().controlSize(.mini)
+                HStack(spacing: 2) {
+                    OutputMenu().controlSize(.mini)
+                    AirPlayIcon()
+                }
                 HStack(spacing: 8) {
                     FaderScale(values: [1, 0.5, 0], top: 1)
                     VerticalFader(value: volume, range: 0...1, reference: nil, label: "\(device.name) volume").frame(width: 30)

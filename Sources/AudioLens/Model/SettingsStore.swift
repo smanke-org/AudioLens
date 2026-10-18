@@ -26,6 +26,7 @@ final class SettingsStore {
         // Per Mac.
         static let deviceVolumes = "deviceVolumes"
         static let deviceTrims = "deviceTrims"
+        static let recentApps = "recentApps"
         static let carryLevel = "carryLevelInDeviceVolume"
         static let layout = "windowLayout"
         static let compact = "windowCompact"
@@ -38,6 +39,13 @@ final class SettingsStore {
     private(set) var apps: [String: AppAudioSettings] = [:]
     private(set) var devices: [String: DeviceSettings] = [:]
     private(set) var deviceVolumes: [String: Double] = [:]
+    /// Apps that have played on this Mac, by bundle id, until the user removes them.
+    private(set) var recentApps: [String: RecentApp] = [:]
+
+    struct RecentApp: Codable, Equatable {
+        var name: String
+        var lastPlayed: Date
+    }
 
     var allowBoost = true { didSet { save(allowBoost, Key.allowBoost, oldValue != allowBoost); if !allowBoost { capBoosts() } } }
     var showPinnedWhenSilent = true { didSet { save(showPinnedWhenSilent, Key.showPinned, oldValue != showPinnedWhenSilent) } }
@@ -79,6 +87,7 @@ final class SettingsStore {
         apps = (defaults.data(forKey: Key.apps)).flatMap { try? decoder.decode([String: AppAudioSettings].self, from: $0) } ?? [:]
         devices = (defaults.data(forKey: Key.devices)).flatMap { try? decoder.decode([String: DeviceSettings].self, from: $0) } ?? [:]
         deviceVolumes = defaults.dictionary(forKey: Key.deviceVolumes) as? [String: Double] ?? [:]
+        recentApps = defaults.data(forKey: Key.recentApps).flatMap { try? decoder.decode([String: RecentApp].self, from: $0) } ?? [:]
         allowBoost = defaults.object(forKey: Key.allowBoost) as? Bool ?? true
         showPinnedWhenSilent = defaults.object(forKey: Key.showPinned) as? Bool ?? true
         showMeters = defaults.object(forKey: Key.showMeters) as? Bool ?? true
@@ -145,6 +154,26 @@ final class SettingsStore {
             saveApps()
             AudioEngine.shared.settingsChanged(appID: nil)
         }
+    }
+
+    // MARK: - Recent apps
+
+    /// Notes that an app is playing. Written at most once a minute per app, since it's called
+    /// every second while something plays.
+    func notePlayed(_ id: String, name: String) {
+        guard !id.hasPrefix("pid:") else { return }
+        if let known = recentApps[id], known.name == name, Date().timeIntervalSince(known.lastPlayed) < 60 { return }
+        recentApps[id] = RecentApp(name: name, lastPlayed: Date())
+        saveRecent()
+    }
+
+    func forgetRecent(_ id: String) {
+        guard recentApps.removeValue(forKey: id) != nil else { return }
+        saveRecent()
+    }
+
+    private func saveRecent() {
+        defaults.set((try? JSONEncoder().encode(recentApps)) ?? Data(), forKey: Key.recentApps)
     }
 
     // MARK: - Devices

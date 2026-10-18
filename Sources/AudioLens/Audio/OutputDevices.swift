@@ -25,6 +25,7 @@ struct OutputDevice: Identifiable, Hashable {
         if lower.contains("airpods") { return "airpods" }
         if lower.contains("homepod mini") { return "homepodmini" }
         if lower.contains("homepod") { return "homepod" }
+        if lower.contains("apple tv") || lower.contains("appletv") { return "appletv" }
         if lower.contains("beats") { return "beats.headphones" }
         switch transport {
         case kAudioDeviceTransportTypeBuiltIn:
@@ -113,8 +114,12 @@ final class OutputDevices {
         if list != devices {
             devices = list
             // Remember names, so settings for a disconnected device still read well.
-            for device in list where SettingsStore.shared.device(device.uid).name != device.name {
-                SettingsStore.shared.updateDevice(device.uid) { $0.name = device.name }
+            for device in list {
+                let known = SettingsStore.shared.device(device.uid)
+                let airPlay = device.transport == kAudioDeviceTransportTypeAirPlay
+                if known.name != device.name || known.airPlay != airPlay {
+                    SettingsStore.shared.updateDevice(device.uid) { $0.name = device.name; $0.airPlay = airPlay }
+                }
             }
             AudioEngine.shared.devicesChanged()
         }

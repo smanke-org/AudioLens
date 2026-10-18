@@ -22,6 +22,9 @@ struct DeviceInspectorLayout: View {
     var body: some View {
         NavigationSplitView {
             List(selection: Binding(get: { current }, set: { selection = $0 })) {
+                Section {
+                    LabeledContent("AirPlay") { AirPlayIcon() }
+                }
                 Section("Output Devices") {
                     ForEach(knownDeviceUIDs(), id: \.self) { uid in
                         HStack {
@@ -78,6 +81,10 @@ struct DeviceInspectorLayout: View {
             if !silent.isEmpty {
                 Section("Pinned · Silent") { ForEach(silent) { CompactAppRow(app: $0) } }
             }
+            let recent = engine.recentApps
+            if !recent.isEmpty {
+                Section("Recent") { ForEach(recent) { CompactAppRow(app: $0, recent: true) } }
+            }
         }
         .formStyle(.grouped)
     }
@@ -86,6 +93,7 @@ struct DeviceInspectorLayout: View {
 /// A narrower app row for the middle column and the compact panel.
 struct CompactAppRow: View {
     let app: AudioApp
+    var recent = false
     @State private var engine = AudioEngine.shared
     @State private var store = SettingsStore.shared
 
@@ -101,6 +109,7 @@ struct CompactAppRow: View {
                 PlayingIndicator(playing: engine.isAudible(app) && !store.app(app.id).muted)
                 AppVolumeSlider(app: app)
                 VolumeText(app: app)
+                if recent { RemoveRecentButton(app: app) }
             }
             FailureNote(app: app).padding(.leading, 36)
         }
@@ -110,8 +119,9 @@ struct CompactAppRow: View {
     private var subtitle: String {
         let s = store.app(app.id)
         if s.muted { return "Muted" }
+        if !engine.isAudible(app) { return appStatusLine(app) }
         if let uid = s.outputUID { return "Always \(OutputDevices.shared.device(uid: uid)?.name ?? store.device(uid).name ?? "chosen device")" }
-        return engine.isAudible(app) ? "System Output" : appStatusLine(app)
+        return "System Output"
     }
 }
 
@@ -133,6 +143,8 @@ struct DeviceInspector: View {
                     Spacer()
                     if device != nil, uid != devices.defaultUID {
                         Button("Use as Output") { devices.makeDefault(uid) }.controlSize(.small)
+                    } else if device == nil, SettingsStore.shared.device(uid).airPlay {
+                        AirPlayConnectButton()
                     }
                 }
             }

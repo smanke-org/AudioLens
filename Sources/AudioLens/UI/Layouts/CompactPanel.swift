@@ -14,6 +14,7 @@ struct CompactPanel: View {
     @State private var devices = OutputDevices.shared
     @State private var store = SettingsStore.shared
     @State private var expanded: String?
+    @State private var showAllRecent = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -69,6 +70,7 @@ struct CompactPanel: View {
             .menuStyle(.button)
             .buttonStyle(.plain)
             .help("Choose the output device")
+            .overlay(alignment: .trailing) { AirPlayIcon().padding(.trailing, 30) }
             if let uid = devices.defaultUID { DeviceVolumeSlider(uid: uid, thick: true).padding(.horizontal, 2) }
         }
     }
@@ -84,15 +86,34 @@ struct CompactPanel: View {
 
     private var appsTab: some View {
         let apps = engine.visibleApps
+        let recent = engine.recentApps
         return ScrollView {
             VStack(alignment: .leading, spacing: 4) {
                 PermissionBanner(compact: true)
-                if apps.isEmpty {
+                if apps.isEmpty && recent.isEmpty {
                     EmptyAppsView().frame(height: 220)
                 }
                 ForEach(apps) { app in
                     PanelAppRow(app: app, expanded: expanded == app.id) {
                         withAnimation(.snappy(duration: 0.18)) { expanded = expanded == app.id ? nil : app.id }
+                    }
+                }
+                if !recent.isEmpty {
+                    HStack {
+                        Text("Recent").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        Spacer()
+                        if recent.count > 3 {
+                            Button(showAllRecent ? "Show Fewer" : "Show All (\(recent.count))") {
+                                withAnimation(.snappy(duration: 0.18)) { showAllRecent.toggle() }
+                            }
+                            .buttonStyle(.link).font(.caption)
+                        }
+                    }
+                    .padding(.horizontal, 8).padding(.top, 8)
+                    ForEach(showAllRecent ? recent : Array(recent.prefix(3))) { app in
+                        PanelAppRow(app: app, expanded: expanded == app.id, recent: true) {
+                            withAnimation(.snappy(duration: 0.18)) { expanded = expanded == app.id ? nil : app.id }
+                        }
                     }
                 }
             }
@@ -108,6 +129,8 @@ struct CompactPanel: View {
                             DeviceSummary(uid: uid, compact: true)
                             if devices.device(uid: uid) != nil, uid != devices.defaultUID {
                                 Button("Use") { devices.makeDefault(uid) }.controlSize(.small)
+                            } else if devices.device(uid: uid) == nil, store.device(uid).airPlay {
+                                AirPlayConnectButton()
                             }
                         }
                         DeviceVolumeSlider(uid: uid)
@@ -178,6 +201,7 @@ struct CompactPanel: View {
 struct PanelAppRow: View {
     let app: AudioApp
     let expanded: Bool
+    var recent = false
     let toggle: () -> Void
     @State private var engine = AudioEngine.shared
     @State private var store = SettingsStore.shared
@@ -196,7 +220,11 @@ struct PanelAppRow: View {
                     }
                     Spacer()
                     if s.pinned && !engine.isAudible(app) { Image(systemName: "pin.fill").font(.caption).foregroundStyle(.secondary) }
-                    PlayingIndicator(playing: engine.isAudible(app) && !s.muted)
+                    if recent {
+                        Text(appStatusLine(app)).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                    } else {
+                        PlayingIndicator(playing: engine.isAudible(app) && !s.muted)
+                    }
                 }
                 .contentShape(Rectangle())
             }
@@ -211,6 +239,7 @@ struct PanelAppRow: View {
                     Button(s.pinned ? "Unpin" : "Pin") { bind.togglePin() }
                     Button("Ignore") { bind.ignore() }
                     Button(s.muted ? "Unmute" : "Mute") { bind.muted.wrappedValue.toggle() }
+                    if recent { Button("Remove") { SettingsStore.shared.forgetRecent(app.id) } }
                 }
                 .controlSize(.mini)
             }

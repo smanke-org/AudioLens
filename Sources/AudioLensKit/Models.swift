@@ -136,6 +136,8 @@ public struct DeviceSettings: Codable, Equatable, Sendable {
     public var eqEnabled = false
     public var eqGains: [Double] = EQPreset.flat.gains
     public var correction: HeadphoneCorrection?
+    /// An AirPlay speaker, which can only be reconnected through the AirPlay picker.
+    public var airPlay = false
 
     public init(name: String? = nil) { self.name = name }
 
@@ -155,6 +157,7 @@ public struct DeviceSettings: Codable, Equatable, Sendable {
             ? gains.map { min(max($0, EQBands.range.lowerBound), EQBands.range.upperBound) }
             : EQPreset.flat.gains
         correction = try c.decodeIfPresent(HeadphoneCorrection.self, forKey: .correction)
+        airPlay = try c.decodeIfPresent(Bool.self, forKey: .airPlay) ?? false
     }
 }
 

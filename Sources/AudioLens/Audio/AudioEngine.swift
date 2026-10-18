@@ -134,6 +134,20 @@ final class AudioEngine {
         }
     }
 
+    /// Apps that have played before and aren't playing or listed as pinned now, most recent
+    /// first, so their saved volume can be changed ahead of the next time they play.
+    var recentApps: [AudioApp] {
+        let store = SettingsStore.shared
+        let shown = Set(visibleApps.map(\.id))
+        return store.recentApps
+            .filter { id, _ in !shown.contains(id) && !store.app(id).ignored }
+            .sorted { $0.value.lastPlayed > $1.value.lastPlayed }
+            .map { id, recent in running[id] ?? AudioApp(id: id, name: recent.name, bundleID: id) }
+    }
+
+    /// When an app in the recent list last played.
+    func lastPlayedDate(_ id: String) -> Date? { SettingsStore.shared.recentApps[id]?.lastPlayed }
+
     /// Playing now or within the linger time.
     func isAudible(_ app: AudioApp) -> Bool {
         app.isPlaying || Date().timeIntervalSince(lastPlayed[app.id] ?? .distantPast) < Self.lingerSeconds
@@ -197,7 +211,10 @@ final class AudioEngine {
         }
 
         let now = Date()
-        for app in found.values where app.isPlaying { lastPlayed[app.id] = now }
+        for app in found.values where app.isPlaying {
+            lastPlayed[app.id] = now
+            SettingsStore.shared.notePlayed(app.id, name: app.name)
+        }
         for id in lastPlayed.keys where found[id] == nil { lastPlayed[id] = nil }
         if found != running {
             if ProcessInfo.processInfo.environment["AUDIOLENS_LOG_PROCESSES"] != nil {
@@ -360,8 +377,10 @@ final class AudioEngine {
                 let missing = app.playingObjects.contains { !pipeline.processObjects.contains($0) }
                 guard pipeline.deviceUID != device.uid || missing else { continue }
                 remove(app.id, reason: pipeline.deviceUID != device.uid ? "output changed" : "new process")
-            } else if !app.isPlaying {
-                // Taps start with sound, so a silent app with settings waits until it plays.
+            } else if !app.isPlaying && !SettingsStore.shared.app(app.id).changesSound {
+                // Only the device's EQ applies, so a silent app can wait until it plays. One with
+                // its own volume, mute or output is tapped already, or its first sound would
+                // come out at full volume before the tap started.
                 continue
             }
             build(app, device: device)

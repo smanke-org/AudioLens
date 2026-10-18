@@ -190,13 +190,33 @@ struct FailureNote: View {
 func appStatusLine(_ app: AudioApp) -> String {
     let engine = AudioEngine.shared
     let s = SettingsStore.shared.app(app.id)
-    if !app.isRunning { return "Not running" }
-    if s.muted { return "Muted" }
     if engine.isAudible(app) {
+        if s.muted { return "Muted" }
         if let uid = s.outputUID, let d = OutputDevices.shared.device(uid: uid) { return "Playing · \(d.name)" }
         return "Playing"
     }
+    if s.muted { return "Muted" }
+    if let played = engine.lastPlayedDate(app.id) {
+        return "Played \(played.formatted(.relative(presentation: .named)))"
+    }
+    if !app.isRunning { return "Not running" }
     return s.pinned ? "Pinned · silent" : "Silent"
+}
+
+/// Takes an app off the recent list (its saved volume stays).
+struct RemoveRecentButton: View {
+    let app: AudioApp
+
+    var body: some View {
+        Button {
+            SettingsStore.shared.forgetRecent(app.id)
+        } label: {
+            Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary)
+        }
+        .buttonStyle(.borderless)
+        .help("Remove \(app.name) from Recent")
+        .accessibilityLabel("Remove \(app.name) from Recent")
+    }
 }
 
 /// An empty list, explained.

@@ -13,6 +13,7 @@ struct DialBoardLayout: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
                     ForEach(knownDeviceUIDs(), id: \.self) { uid in DeviceChip(uid: uid) }
+                    AirPlayIcon().padding(.horizontal, 6)
                 }
                 .padding(.horizontal, 18).padding(.vertical, 14)
             }
@@ -22,12 +23,19 @@ struct DialBoardLayout: View {
                 VStack(spacing: 12) {
                     PermissionBanner()
                     let apps = engine.visibleApps
-                    if apps.isEmpty {
+                    let recent = engine.recentApps
+                    if apps.isEmpty && recent.isEmpty {
                         EmptyAppsView().frame(height: 300)
                     } else {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 180, maximum: 240), spacing: 14)], spacing: 14) {
                             ForEach(apps) { DialTile(app: $0) }
                             PinHintTile()
+                        }
+                        if !recent.isEmpty {
+                            Text("Recent").font(.headline).frame(maxWidth: .infinity, alignment: .leading).padding(.top, 8)
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 180, maximum: 240), spacing: 14)], spacing: 14) {
+                                ForEach(recent) { DialTile(app: $0, recent: true) }
+                            }
                         }
                     }
                 }
@@ -88,6 +96,7 @@ struct DeviceChip: View {
 /// One app as a tile with a dial.
 struct DialTile: View {
     let app: AudioApp
+    var recent = false
     @State private var engine = AudioEngine.shared
     @State private var store = SettingsStore.shared
 
@@ -104,10 +113,12 @@ struct DialTile: View {
                     Image(systemName: "pin.fill").font(.caption).foregroundStyle(.secondary)
                 }
                 MuteButton(app: app)
+                if recent { RemoveRecentButton(app: app) }
             }
             VolumeKnob(value: AppBindings(app: app).volume, range: 0...store.maxVolume, label: "\(app.name) volume", size: 104)
                 .opacity(s.muted ? 0.45 : 1)
             RoutePicker(app: app, compact: true)
+            if recent { Text(appStatusLine(app)).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
             FailureNote(app: app)
         }
         .padding(12)

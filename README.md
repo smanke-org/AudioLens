@@ -21,7 +21,9 @@ Requires macOS 26 or later.
 - **Per-app output.** Send an app to a different device than the system output, for example a call to your AirPods while music plays on the speakers.
 - **Device memory.** Each output device (speakers, headphones, AirPods, HomePods, displays) keeps its own volume on each Mac. When it becomes the output again, AudioLens puts the volume back. Lock a device to keep it at that level.
 - **Equalizer per device.** A 10-band EQ with presets for each output device, plus **headphone correction**: pick your headphone model from thousands of measurements in the [AutoEQ](https://github.com/jaakkopasanen/AutoEq) project, or import a ParametricEQ.txt file.
+- **Recent apps.** Apps that played before stay in a Recent list until you remove them, so you can set their volume or output before they play again.
 - **Pin and ignore.** Pin an app to keep it listed while it's silent. Ignore an app and AudioLens leaves it completely alone.
+- **AirPlay.** The AirPlay button connects a HomePod, Apple TV or other AirPlay speaker and makes it the output. Speakers you've used stay listed with their volume and EQ, with a Connect button.
 - **Global hotkeys.** Turn the playing app up or down, or mute it, from anywhere (⌃⌥↑, ⌃⌥↓, ⌃⌥M by default).
 - **Choose your layout.** Source List (the default), Mixing Desk, Dial Board or Device Inspector, from Settings or the View menu (⌘1 to ⌘4). Any of them shrinks to the compact panel with ⇧⌘C, and the menu bar icon opens the same compact panel.
 - **Dock, menu bar, both or neither.** Turn either icon off in Settings. With both off, open AudioLens again from Applications or Spotlight to get the window back.

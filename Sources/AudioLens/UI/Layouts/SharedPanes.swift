@@ -5,6 +5,7 @@ import SwiftUI
 struct AppRow: View {
     let app: AudioApp
     var showRoute = true
+    var recent = false
     @State private var engine = AudioEngine.shared
     @State private var store = SettingsStore.shared
 
@@ -22,6 +23,7 @@ struct AppRow: View {
                 MuteButton(app: app)
                 AppVolumeSlider(app: app)
                 VolumeText(app: app)
+                if recent { RemoveRecentButton(app: app) }
             }
             FailureNote(app: app).padding(.leading, 40)
         }
@@ -40,7 +42,8 @@ struct AppsList: View {
         let apps = engine.visibleApps
         let playing = apps.filter(engine.isAudible)
         let silent = apps.filter { !engine.isAudible($0) }
-        if apps.isEmpty {
+        let recent = engine.recentApps
+        if apps.isEmpty && recent.isEmpty {
             VStack(spacing: 0) {
                 PermissionBanner().padding()
                 EmptyAppsView()
@@ -53,6 +56,16 @@ struct AppsList: View {
                 }
                 if !silent.isEmpty {
                     Section("Pinned · Silent") { ForEach(silent) { AppRow(app: $0, showRoute: showRoute) } }
+                }
+                if !recent.isEmpty {
+                    Section {
+                        ForEach(recent) { AppRow(app: $0, showRoute: showRoute, recent: true) }
+                    } header: {
+                        Text("Recent")
+                    } footer: {
+                        Text("Apps that played before. Their volume and output apply the next time they play.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 Section {
                 } footer: {
@@ -72,6 +85,14 @@ struct DevicesPane: View {
 
     var body: some View {
         Form {
+            Section {
+                LabeledContent {
+                    AirPlayIcon()
+                } label: {
+                    Text("AirPlay speakers")
+                    Text("HomePods, Apple TVs and other AirPlay speakers appear here once you've connected them. Use the AirPlay button to connect one.")
+                }
+            }
             ForEach(knownDeviceUIDs(), id: \.self) { uid in
                 Section {
                     HStack {
@@ -80,6 +101,7 @@ struct DevicesPane: View {
                             Button("Use as Output") { devices.makeDefault(uid) }.controlSize(.small)
                         }
                         if devices.device(uid: uid) == nil {
+                            if store.device(uid).airPlay { AirPlayConnectButton() }
                             Button("Forget") { store.forgetDevice(uid) }.controlSize(.small)
                         }
                     }
@@ -219,6 +241,7 @@ struct OutputBar: View {
                 }
                 .frame(maxWidth: 240, alignment: .leading)
                 OutputMenu().controlSize(.small)
+                AirPlayIcon()
                 Spacer()
                 DeviceVolumeSlider(uid: device.uid).frame(maxWidth: 320)
             } else {
