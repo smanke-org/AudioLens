@@ -79,8 +79,8 @@ final class MainWindow: NSObject, NSWindowDelegate {
             window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
-            window.contentMinSize = NSSize(width: 340, height: 380)
-            window.contentMaxSize = NSSize(width: 340, height: 1600)
+            window.contentMinSize = NSSize(width: Self.compactWidth, height: 380)
+            window.contentMaxSize = NSSize(width: Self.compactWidth, height: 1600)
         } else {
             window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
             window.titlebarAppearsTransparent = false
@@ -92,7 +92,11 @@ final class MainWindow: NSObject, NSWindowDelegate {
         let animate = window.isVisible
         let target = frame(for: compact)
         window.setFrame(target, display: true, animate: animate)
-        DispatchQueue.main.asyncAfter(deadline: .now() + (animate ? 0.6 : 0.05)) { [weak self] in self?.applyingFrame = false }
+        DispatchQueue.main.asyncAfter(deadline: .now() + (animate ? 0.6 : 0.05)) { [weak self] in
+            self?.applyingFrame = false
+            // A resize by someone else while the frame was changing was ignored; undo it now.
+            self?.windowDidResize(Notification(name: NSWindow.didResizeNotification, object: window))
+        }
         applyLevel()
     }
 
@@ -106,6 +110,9 @@ final class MainWindow: NSObject, NSWindowDelegate {
 
     private func saveFrame() {
         guard let window, window.isVisible, !applyingFrame else { return }
+        // Mid-way through someone else's resize the panel can be the wrong width; that frame
+        // isn't the panel's.
+        if store.compact, abs(window.contentRect(forFrameRect: window.frame).width - Self.compactWidth) > 1 { return }
         UserDefaults.standard.set(NSStringFromRect(window.frame), forKey: frameKey)
     }
 
@@ -116,7 +123,11 @@ final class MainWindow: NSObject, NSWindowDelegate {
             var rect = NSRectFromString(saved)
             // Never narrower than the layout needs (an older build saved too-small frames).
             if !compact { rect.size.width = max(rect.width, store.layout.minimumWidth) }
-            if rect.width > 100, NSScreen.screens.contains(where: { $0.visibleFrame.intersects(rect) }) { return rect }
+            // A compact frame saved at another width was resized by something else (a window
+            // manager); its height is just as wrong, so it starts over at the natural size.
+            let savedWidth = window.map { $0.contentRect(forFrameRect: rect).width } ?? rect.width
+            let stale = compact && abs(savedWidth - Self.compactWidth) > 1
+            if !stale, rect.width > 100, NSScreen.screens.contains(where: { $0.visibleFrame.intersects(rect) }) { return rect }
         }
         let screen = window?.screen ?? NSScreen.main
         let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
@@ -138,11 +149,41 @@ final class MainWindow: NSObject, NSWindowDelegate {
         return NSRect(origin: origin, size: content)
     }
 
+    /// `rect` at the compact panel's width, keeping its right edge.
+    private func compactWidth(_ rect: NSRect) -> NSRect {
+        guard let window else { return rect }
+        let width = window.frameRect(forContentRect: NSRect(x: 0, y: 0, width: Self.compactWidth, height: 100)).width
+        var rect = rect
+        rect.origin.x = rect.maxX - width
+        rect.size.width = width
+        return rect
+    }
+
+    private static let compactWidth: CGFloat = 340
+
     /// Another app (a window manager, say) can resize the window through Accessibility, past
-    /// the minimum AppKit enforces for the user. A layout squeezed below its width clips, so
-    /// it's widened back.
+    /// the limits AppKit enforces for the user. A layout squeezed below its width clips, so
+    /// it's widened back; the compact panel goes back to its own width.
     func windowDidResize(_ notification: Notification) {
-        guard let window, !applyingFrame, !store.compact else { return }
+        guard let window, !applyingFrame else { return }
+        if store.compact {
+            // Only a drag of the edge (a live resize) sets the panel's height; anything else
+            // that resizes it, such as a window manager restoring an old frame at launch,
+            // gets the panel's own size back. It keeps its top-right corner where it was put.
+            let wanted = window.inLiveResize ? compactWidth(window.frame).size : frame(for: true).size
+            guard abs(window.frame.width - wanted.width) > 1 || abs(window.frame.height - wanted.height) > 1 else { return }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.store.compact else { return }
+                var frame = NSRect(x: window.frame.maxX - wanted.width, y: window.frame.maxY - wanted.height,
+                                   width: wanted.width, height: wanted.height)
+                if let visible = window.screen?.visibleFrame {
+                    frame.origin.x = min(max(frame.origin.x, visible.minX), visible.maxX - frame.width)
+                    frame.origin.y = min(max(frame.origin.y, visible.minY), visible.maxY - frame.height)
+                }
+                window.setFrame(frame, display: true)
+            }
+            return
+        }
         let minimum = store.layout.minimumWidth
         let content = window.contentRect(forFrameRect: window.frame)
         guard content.width < minimum - 1 else { return }
