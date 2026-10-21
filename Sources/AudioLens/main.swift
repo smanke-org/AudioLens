@@ -211,6 +211,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         windowItem.submenu = windowMenu
         NSApp.windowsMenu = windowMenu
         main.addItem(windowItem)
+
+        // Help menu, with the standard ⌘? (macOS adds its search field).
+        let helpItem = NSMenuItem()
+        let help = NSMenu(title: "Help")
+        help.addItem(item("AudioLens Help", #selector(showHelp), key: "?"))
+        helpItem.submenu = help
+        NSApp.helpMenu = help
+        main.addItem(helpItem)
         return main
     }
 
@@ -237,6 +245,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // The status item's menu, for a right-click or Control-click.
         menu.addItem(item("Open AudioLens", #selector(showWindow)))
+        let helpEntry = item("AudioLens Help", #selector(showHelp))
+        helpEntry.image = NSImage(systemSymbolName: "questionmark.circle", accessibilityDescription: nil)
+        menu.addItem(helpEntry)
         menu.addItem(item("Settings…", #selector(showSettings), key: ","))
         menu.addItem(.separator())
         if let staged = AutoUpdater.shared.staged {
@@ -325,6 +336,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc func showWindow() { closePopover(); MainWindow.shared.show() }
     @objc func showCompact() { MainWindow.shared.show(compact: true) }
     @objc func showSettings() { closePopover(); SettingsWindow.shared.show() }
+    @objc func showHelp() { closePopover(); HelpWindow.shared.show() }
     @objc func checkForUpdates() { UpdateController.checkForUpdates() }
     @objc func installUpdateNow() { AutoUpdater.shared.installNow() }
     @objc func quit() { NSApp.terminate(nil) }
