@@ -136,6 +136,7 @@ final class PresenceSettings {
     func reload() {
         if showInDock != AppPresence.showInDock { showInDock = AppPresence.showInDock }
         if showInMenuBar != AppPresence.showInMenuBar { showInMenuBar = AppPresence.showInMenuBar }
+        MenuHub.shared.reload()
         // The status item follows the notification, which the setter only posts on a change.
         NotificationCenter.default.post(name: AppPresence.menuBarDidChange, object: nil)
     }

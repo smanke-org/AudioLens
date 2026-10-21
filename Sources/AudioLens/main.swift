@@ -30,9 +30,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         HotKeys.shared.apply()
 
         setUpStatusItem()
+        // ToolHUD can take the menu into its own while it runs.
         NotificationCenter.default.addObserver(forName: AppPresence.menuBarDidChange, object: nil, queue: .main) { _ in
-            MainActor.assumeIsolated { [weak self] in self?.statusItem?.isVisible = AppPresence.showInMenuBar }
+            MainActor.assumeIsolated { [weak self] in self?.statusItem?.isVisible = MenuHub.shared.showsOwnIcon }
         }
+        // ToolHUD gets the right-click menu, led by the compact panel in its own window,
+        // since the drop-down needs the menu bar icon to hang from.
+        MenuHub.shared.onChange = { SettingsSync.shared.localDidChange() }
+        MenuHub.shared.start(menu: { [weak self] in
+            let menu = NSMenu()
+            guard let self else { return menu }
+            menuNeedsUpdate(menu)
+            menu.insertItem(.separator(), at: 0)
+            menu.insertItem(item("Show Compact Panel", #selector(showCompactPanel)), at: 0)
+            return menu
+        }, icon: { [weak self] in self?.statusItem?.button?.image })
 
         #if DEBUG
         if DebugHooks.run() { return }
@@ -108,6 +120,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             case "menubar":
                 // After the URL's own activation settles, or the transient popover closes at once.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                    // With the icon in ToolHUD's menu there's nothing to hang it from.
+                    if MenuHub.shared.isHosted { return MainWindow.shared.show(compact: true) }
                     guard let self, let button = self.statusItem?.button, self.statusItem?.isVisible == true else { return }
                     if self.popover?.isShown != true { self.togglePopover(button) }
                 }
@@ -257,9 +271,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         item.button?.target = self
         item.button?.action = #selector(statusClicked(_:))
         item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        item.isVisible = AppPresence.showInMenuBar
+        item.isVisible = MenuHub.shared.showsOwnIcon
         statusItem = item
     }
+
+    @objc private func showCompactPanel() { MainWindow.shared.show(compact: true) }
 
     /// A click opens the compact panel; a right-click or Control-click opens the menu.
     @objc private func statusClicked(_ sender: NSStatusBarButton) {

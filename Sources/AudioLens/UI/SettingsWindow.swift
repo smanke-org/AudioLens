@@ -105,6 +105,7 @@ struct SettingsRoot: View {
 struct GeneralSettings: View {
     @State private var store = SettingsStore.shared
     @State private var presence = PresenceSettings.shared
+    @State private var hub = MenuHub.shared
     @State private var login = LaunchAtLogin.shared
     @State private var permission = CapturePermission.shared
     @State private var confirmReset = false
@@ -131,6 +132,8 @@ struct GeneralSettings: View {
             Section("Where AudioLens appears") {
                 Toggle("Show in Dock", isOn: $presence.showInDock)
                 Toggle("Show in menu bar", isOn: $presence.showInMenuBar)
+                Toggle("Put in ToolHUD’s menu while ToolHUD is running", isOn: $hub.foldIntoToolHUD)
+                    .help("ToolHUD shows AudioLens’s menu as a submenu of its own, and AudioLens’s icon leaves the menu bar until ToolHUD quits.")
                 if !presence.showInDock && !presence.showInMenuBar {
                     Text(AppPresence.hiddenEverywhereNote(appName: "AudioLens", settingsName: "the AudioLens window"))
                         .font(.callout).foregroundStyle(.secondary)
