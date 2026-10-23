@@ -53,3 +53,7 @@ swift test          # the AudioLensKit tests: EQ math, the audio processor, Auto
 ```
 
 Headphone correction data comes from the AutoEQ project by Jaakko Pasanen (MIT License).
+
+## License
+
+© 2026 Steve Manke. All rights reserved.
