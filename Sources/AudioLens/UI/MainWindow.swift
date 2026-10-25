@@ -127,14 +127,25 @@ final class MainWindow: NSObject, NSWindowDelegate {
             // manager); its height is just as wrong, so it starts over at the natural size.
             let savedWidth = window.map { $0.contentRect(forFrameRect: rect).width } ?? rect.width
             let stale = compact && abs(savedWidth - Self.compactWidth) > 1
-            if !stale, rect.width > 100, NSScreen.screens.contains(where: { $0.visibleFrame.intersects(rect) }) { return rect }
+            if !stale, rect.width > 100, let visible = NSScreen.screens.first(where: { $0.visibleFrame.intersects(rect) })?.visibleFrame {
+                // A frame saved on a bigger display is cut down to the one it's on now.
+                rect.size.width = min(rect.width, visible.width)
+                rect.size.height = min(rect.height, visible.height)
+                rect.origin.x = min(max(rect.origin.x, visible.minX), visible.maxX - rect.width)
+                rect.origin.y = min(max(rect.origin.y, visible.minY), visible.maxY - rect.height)
+                return rect
+            }
         }
         let screen = window?.screen ?? NSScreen.main
         let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         let size: NSSize = compact
             ? NSSize(width: 340, height: min(600, visible.height - 40))
             : NSSize(width: store.layout.defaultSize.width, height: store.layout.defaultSize.height)
-        let content = window.map { $0.frameRect(forContentRect: NSRect(origin: .zero, size: size)).size } ?? size
+        var content = window.map { $0.frameRect(forContentRect: NSRect(origin: .zero, size: size)).size } ?? size
+        // A 13-inch MacBook Air at a larger text size has well under the Device Inspector's
+        // natural height to give.
+        content.width = min(content.width, visible.width)
+        content.height = min(content.height, visible.height)
         let current = window?.isVisible == true ? window!.frame : nil
         var origin: NSPoint
         if let current {
