@@ -396,7 +396,10 @@ final class SettingsSync {
 /// The sync data key, kept in this Mac's login keychain.
 enum SyncKeychain {
     static let service = "com.smanke.AudioLens.sync"
-    static let account = "data-key"
+    /// Test runs (AUDIOLENS_SYNC_FOLDER set) keep their own key and never read the real one.
+    static var account: String {
+        ProcessInfo.processInfo.environment["AUDIOLENS_SYNC_FOLDER"] == nil ? "data-key" : "data-key-test"
+    }
 
     static func saveKey(_ key: SymmetricKey) {
         deleteKey()

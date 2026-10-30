@@ -74,6 +74,7 @@ enum Help {
                 ("⌘?", "This Help"),
             ]),
             .tip("While ToolHUD is running, AudioLens's menu moves into ToolHUD's menu bar menu as a submenu, and the icon here steps aside until ToolHUD quits. To keep the icon, turn off \"Put in ToolHUD's menu while ToolHUD is running\" in Settings › General."),
+            .tip("Quitting asks first, since app volumes, EQ and hotkeys stop while AudioLens is closed. Turn off \"Ask before quitting\" in Settings › General, or tick \"Don't ask again\" when it asks."),
         ]),
 
         HelpTopic(id: "apps", title: "App Volumes", symbol: "slider.horizontal.3", blocks: [
@@ -156,7 +157,7 @@ enum Help {
         ]),
 
         HelpTopic(id: "sync", title: "Sync and Updates", symbol: "icloud", blocks: [
-            .text("Turn on sync in Settings › Sync to keep app volumes, mutes, pins, ignores and outputs, each device's EQ and headphone correction, and your options and hotkeys the same on every Mac signed in to the same iCloud account. They're encrypted with a passphrase you choose; enter the same one on each Mac."),
+            .text("Turn on sync in Settings › Sync to keep app volumes, mutes, pins, ignores and outputs, each device's EQ and headphone correction, your options and hotkeys, and asking before quitting the same on every Mac signed in to the same iCloud account. They're encrypted with a passphrase you choose; enter the same one on each Mac."),
             .text("Each Mac keeps its own device volumes, window layout and open-at-login choice."),
             .heading("Updates"),
             .text("AudioLens checks for a new version once a day, or on the schedule you set in Settings › Updates. It can install automatically, ask first, or not check at all. Automatic installs wait until no adjusted app is playing and your Mac isn't in use."),

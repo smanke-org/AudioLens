@@ -157,6 +157,8 @@ struct GeneralSettings: View {
                 if let error = login.lastError {
                     Text(error).font(.callout).foregroundStyle(.red)
                 }
+                Toggle("Ask before quitting", isOn: $store.confirmQuit)
+                    .help("Quitting AudioLens asks first, so a stray ⌘Q doesn't put every app back to full volume.")
             } footer: {
                 Text("Per-app volumes and EQ only work while AudioLens is running, so opening it at login keeps them in effect.")
                     .font(.caption).foregroundStyle(.secondary)

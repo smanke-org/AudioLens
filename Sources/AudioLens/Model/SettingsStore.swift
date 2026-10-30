@@ -23,6 +23,7 @@ final class SettingsStore {
         static let showMeters = "showMeters"
         static let appearance = "appearance"
         static let volumeStep = "volumeStep"
+        static let confirmQuit = "confirmQuit"
         static let hotKeyUp = "hotKey.volumeUp"
         static let hotKeyDown = "hotKey.volumeDown"
         static let hotKeyMute = "hotKey.mute"
@@ -40,7 +41,7 @@ final class SettingsStore {
 
     /// Settings that follow the user between Macs.
     static let syncedKeys = [Key.apps, Key.devices, Key.allowBoost, Key.showPinned, Key.showMeters, Key.carryLevel, Key.appearance,
-                             Key.volumeStep, Key.hotKeyUp, Key.hotKeyDown, Key.hotKeyMute]
+                             Key.volumeStep, Key.hotKeyUp, Key.hotKeyDown, Key.hotKeyMute, Key.confirmQuit]
 
     private(set) var apps: [String: AppAudioSettings] = [:]
     private(set) var devices: [String: DeviceSettings] = [:]
@@ -56,6 +57,8 @@ final class SettingsStore {
     var allowBoost = true { didSet { save(allowBoost, Key.allowBoost, oldValue != allowBoost); if !allowBoost { capBoosts() } } }
     var showPinnedWhenSilent = true { didSet { save(showPinnedWhenSilent, Key.showPinned, oldValue != showPinnedWhenSilent) } }
     var showMeters = true { didSet { save(showMeters, Key.showMeters, oldValue != showMeters) } }
+    /// Quitting asks first, so a stray ⌘Q doesn't put every app back to full volume.
+    var confirmQuit = true { didSet { save(confirmQuit, Key.confirmQuit, oldValue != confirmQuit) } }
 
     /// Light or dark for AudioLens alone, or following the system.
     enum Appearance: String, CaseIterable, Identifiable {
@@ -132,6 +135,7 @@ final class SettingsStore {
         allowBoost = defaults.object(forKey: Key.allowBoost) as? Bool ?? true
         showPinnedWhenSilent = defaults.object(forKey: Key.showPinned) as? Bool ?? true
         showMeters = defaults.object(forKey: Key.showMeters) as? Bool ?? true
+        confirmQuit = defaults.object(forKey: Key.confirmQuit) as? Bool ?? true
         appearance = defaults.string(forKey: Key.appearance).flatMap(Appearance.init) ?? .system
         carryLevelInDeviceVolume = defaults.object(forKey: Key.carryLevel) as? Bool ?? true
         volumeStep = min(max(defaults.object(forKey: Key.volumeStep) as? Double ?? 0.05, 0.01), 0.25)
@@ -158,7 +162,7 @@ final class SettingsStore {
             Key.showPinned: showPinnedWhenSilent, Key.showMeters: showMeters, Key.volumeStep: volumeStep,
             Key.carryLevel: carryLevelInDeviceVolume, Key.appearance: appearance.rawValue,
             Key.hotKeyUp: hotKeyUp.map(data) ?? Data(), Key.hotKeyDown: hotKeyDown.map(data) ?? Data(),
-            Key.hotKeyMute: hotKeyMute.map(data) ?? Data(),
+            Key.hotKeyMute: hotKeyMute.map(data) ?? Data(), Key.confirmQuit: confirmQuit,
         ]
     }
 
