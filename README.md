@@ -4,6 +4,8 @@
 
 macOS has one volume for everything. A video call ends up as loud as the music behind it, a notification blasts through your headphones, and switching from AirPods to a HomePod leaves you hunting for the right level again. AudioLens gives every app that's playing its own slider (up to 150%), sends any app to the speaker or headphones you choose, and remembers each device's volume and EQ so they come back the moment it connects.
 
+<p align="center"><img src="docs/images/audiolens-sourcelist.webp" width="800" alt="The AudioLens window in the Source List layout, with Music playing at 42% and the MacBook Pro Speakers at 45%"></p>
+
 ## Download
 
 ### [⬇︎ Download AudioLens.dmg](https://github.com/smanke-org/AudioLens/releases/latest/download/AudioLens.dmg)
@@ -29,6 +31,19 @@ Requires macOS 26 or later.
 - **Choose your layout.** Source List (the default), Mixing Desk, Dial Board or Device Inspector, from Settings or the View menu (⌘1 to ⌘4). Any of them shrinks to the compact panel with ⇧⌘C, and the menu bar icon opens the same compact panel.
 - **Dock, menu bar, both or neither.** Turn either icon off in Settings. With both off, open AudioLens again from Applications or Spotlight to get the window back.
 - **Encrypted sync.** Turn on sync to keep app volumes, device EQ and options the same on all your Macs through iCloud Drive, end-to-end encrypted with your own passphrase. Device volumes and the window layout stay per Mac.
+
+## Screenshots
+
+<table>
+<tr>
+<td width="50%"><img src="docs/images/audiolens-deviceinspector.webp" alt="The Device Inspector layout, with the output devices on the left, Music playing in the middle, and the speakers' volume, restore and lock switches and 10-band equalizer on the right"><br><sub><b>Device Inspector.</b> Each device's volume, lock and EQ, plus headphone correction.</sub></td>
+<td width="50%"><img src="docs/images/audiolens-mixingdesk.webp" alt="The Mixing Desk layout, with a vertical fader for Music up to 150% and a fader for the MacBook Pro Speakers"><br><sub><b>Mixing Desk.</b> A fader for every app, up to 150%.</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/images/audiolens-dialboard.webp" alt="The Dial Board layout, with the output devices along the top and a volume dial for Music"><br><sub><b>Dial Board.</b> A dial for every app, with the outputs along the top.</sub></td>
+<td width="50%" align="center"><img src="docs/images/audiolens-compact.png" width="320" alt="The AudioLens compact panel, with the output device's volume and a slider for Music"><br><sub><b>Compact panel.</b> The same controls from the menu bar, or with ⇧⌘C.</sub></td>
+</tr>
+</table>
 
 ## How it works
 
