@@ -58,11 +58,16 @@ AudioLens checks GitHub for new versions once a day (you can change how often, o
 ## Automation
 
 - `audiolens://show` opens the window, `audiolens://compact` the compact panel, `audiolens://settings` Settings.
+- `audiolens://volume-up`, `audiolens://volume-down` and `audiolens://mute` turn the playing app up, down, or mute and unmute it, as the hotkeys do.
+- `audiolens://next-output` makes the next output device (in name order, skipping virtual devices) the system output.
+- `audiolens://volume?app=<bundle id>&value=<0–150>`, `audiolens://mute?app=<bundle id>&on=<1|0>` and `audiolens://eq?device=default&preset=<name>` set one app's volume or mute, or a device's EQ. `app=playing`, or no `app`, means the playing app.
+
+[ToolHUD](https://github.com/smanke-org/ToolHUD) lists AudioLens's ring actions on its own: Open AudioLens, Show Compact Panel, Turn the playing app up, Turn the playing app down, Mute or unmute the playing app, and Switch to the next output.
 
 ## Building
 
 ```bash
-swift test          # the AudioLensKit tests: EQ math, the audio processor, AutoEQ parsing
+swift test          # the AudioLensKit tests: EQ math, the audio processor, AutoEQ parsing, links
 ./build_app.sh      # builds and signs .build/app/AudioLens.app with your Developer ID
 ./release.sh 1.0.1  # build, notarize, disk image and GitHub release
 ```

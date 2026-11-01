@@ -219,3 +219,71 @@ import Testing
         #expect(ring.available == ring.capacity)
     }
 }
+
+@Suite struct URLCommandTests {
+    private func command(_ string: String) -> URLCommand? { URLCommand(url: URL(string: string)!) }
+
+    @Test func toolHUDActionsParse() {
+        #expect(command("audiolens://open?source=toolhud") == .showWindow)
+        #expect(command("audiolens://compact?source=toolhud") == .compactPanel)
+        #expect(command("audiolens://volume-up?source=toolhud") == .nudge(.up))
+        #expect(command("audiolens://volume-down?source=toolhud") == .nudge(.down))
+        #expect(command("audiolens://mute?source=toolhud") == .nudge(.mute))
+        #expect(command("audiolens://next-output?source=toolhud") == .nextOutput)
+    }
+
+    @Test func everyDeclaredToolHUDActionIsKnown() throws {
+        // The ids in Resources/Info.plist must be hosts the handler answers, not the window fallback.
+        let plist = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().appending(path: "Resources/Info.plist")
+        let info = try #require(NSDictionary(contentsOf: plist) as? [String: Any])
+        let actions = try #require(info["ToolHUDActions"] as? [[String: Any]])
+        #expect((3...7).contains(actions.count))
+        let schemes = (info["CFBundleURLTypes"] as? [[String: Any]])?.flatMap { $0["CFBundleURLSchemes"] as? [String] ?? [] }
+        #expect(schemes == [URLCommand.scheme])
+        for action in actions {
+            let id = try #require(action["id"] as? String)
+            #expect(action["title"] is String && action["symbol"] is String && action["activates"] is Bool)
+            let parsed = command("audiolens://\(id)?source=toolhud")
+            #expect(parsed != nil)
+            if id != "open" { #expect(parsed != .showWindow, "\(id) falls through to the window") }
+        }
+    }
+
+    @Test func existingLinksKeepTheirMeaning() {
+        #expect(command("audiolens://show") == .showWindow)
+        #expect(command("audiolens://menubar") == .menuBarPanel)
+        #expect(command("audiolens://settings") == .settings)
+        #expect(command("audiolens://whatever") == .showWindow)
+        #expect(command("audiolens://volume?app=com.example.player&value=40") == .setVolume(.app("com.example.player"), percent: 40))
+        #expect(command("audiolens://volume?app=playing&value=120") == .setVolume(.playing, percent: 120))
+        #expect(command("audiolens://mute?app=com.example.player&on=1") == .setMuted(.app("com.example.player"), muted: true))
+        #expect(command("audiolens://mute?app=com.example.player&on=0") == .setMuted(.app("com.example.player"), muted: false))
+        #expect(command("audiolens://mute?app=com.example.player") == .setMuted(.app("com.example.player"), muted: nil))
+        #expect(command("audiolens://mute?on=true") == .setMuted(.playing, muted: true))
+        #expect(command("audiolens://eq?device=default&preset=Bass%20Boost&on=1")
+                == .eq(device: "default", preset: "Bass Boost", enabled: true))
+        #expect(command("https://example.com/volume-up") == nil)
+    }
+
+    @Test func nextOutputCyclesInNameOrderSkippingVirtualDevices() {
+        let devices: [OutputCycle.Candidate] = [
+            .init(uid: "speakers", name: "MacBook Pro Speakers"),
+            .init(uid: "loopback", name: "Loopback Driver", isVirtual: true),
+            .init(uid: "headphones", name: "Headphones"),
+            .init(uid: "display", name: "Studio Display"),
+        ]
+        #expect(OutputCycle.next(after: "headphones", in: devices) == "speakers")
+        #expect(OutputCycle.next(after: "speakers", in: devices) == "display")
+        #expect(OutputCycle.next(after: "display", in: devices) == "headphones")
+        // On a skipped device, the first real one.
+        #expect(OutputCycle.next(after: "loopback", in: devices) == "headphones")
+        #expect(OutputCycle.next(after: nil, in: devices) == "headphones")
+        // Nothing else to switch to.
+        #expect(OutputCycle.next(after: "speakers", in: [devices[0]]) == nil)
+        #expect(OutputCycle.next(after: "speakers", in: []) == nil)
+        // Only virtual devices: they're used after all.
+        let virtualOnly: [OutputCycle.Candidate] = [.init(uid: "a", name: "A", isVirtual: true), .init(uid: "b", name: "B", isVirtual: true)]
+        #expect(OutputCycle.next(after: "a", in: virtualOnly) == "b")
+    }
+}

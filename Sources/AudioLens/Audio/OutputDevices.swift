@@ -1,3 +1,4 @@
+import AudioLensKit
 import AudioToolbox
 import CoreAudio
 import Foundation
@@ -246,6 +247,21 @@ final class OutputDevices {
     func makeDefault(_ uid: String) {
         guard let device = device(uid: uid) else { return }
         CA.set(CA.system, kAudioHardwarePropertyDefaultOutputDevice, value: device.objectID)
+    }
+
+    /// Makes the next device, in name order, the system output (`audiolens://next-output`),
+    /// skipping virtual and aggregate devices. Returns it, or nil if there's no other device.
+    @discardableResult
+    func makeNextDefault() -> OutputDevice? {
+        refresh()
+        let candidates = devices.map {
+            OutputCycle.Candidate(uid: $0.uid, name: $0.name,
+                                  isVirtual: $0.transport == kAudioDeviceTransportTypeVirtual
+                                      || $0.transport == kAudioDeviceTransportTypeAggregate)
+        }
+        guard let uid = OutputCycle.next(after: defaultUID, in: candidates), let device = device(uid: uid) else { return nil }
+        makeDefault(uid)
+        return device
     }
 
     /// A device's volume as the user set it, or the level AudioLens remembers for it if it's

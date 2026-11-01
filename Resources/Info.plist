@@ -46,5 +46,80 @@
 	<string>Copyright © 2026 Steve Manke</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>AudioLens looks for HomePods, Apple TVs and other AirPlay speakers on your network so you can connect them.</string>
+	<key>ToolHUDActions</key>
+	<array>
+		<dict>
+			<key>activates</key>
+			<true/>
+			<key>id</key>
+			<string>open</string>
+			<key>shortTitle</key>
+			<string>App volumes</string>
+			<key>symbol</key>
+			<string>slider.horizontal.3</string>
+			<key>title</key>
+			<string>Open AudioLens</string>
+		</dict>
+		<dict>
+			<key>activates</key>
+			<true/>
+			<key>id</key>
+			<string>compact</string>
+			<key>shortTitle</key>
+			<string>Compact panel</string>
+			<key>symbol</key>
+			<string>slider.horizontal.below.rectangle</string>
+			<key>title</key>
+			<string>Show Compact Panel</string>
+		</dict>
+		<dict>
+			<key>activates</key>
+			<false/>
+			<key>id</key>
+			<string>volume-up</string>
+			<key>shortTitle</key>
+			<string>Volume up</string>
+			<key>symbol</key>
+			<string>speaker.wave.3</string>
+			<key>title</key>
+			<string>Turn the playing app up</string>
+		</dict>
+		<dict>
+			<key>activates</key>
+			<false/>
+			<key>id</key>
+			<string>volume-down</string>
+			<key>shortTitle</key>
+			<string>Volume down</string>
+			<key>symbol</key>
+			<string>speaker.wave.1</string>
+			<key>title</key>
+			<string>Turn the playing app down</string>
+		</dict>
+		<dict>
+			<key>activates</key>
+			<false/>
+			<key>id</key>
+			<string>mute</string>
+			<key>shortTitle</key>
+			<string>Mute</string>
+			<key>symbol</key>
+			<string>speaker.slash</string>
+			<key>title</key>
+			<string>Mute or unmute the playing app</string>
+		</dict>
+		<dict>
+			<key>activates</key>
+			<false/>
+			<key>id</key>
+			<string>next-output</string>
+			<key>shortTitle</key>
+			<string>Next output</string>
+			<key>symbol</key>
+			<string>hifispeaker.arrow.forward</string>
+			<key>title</key>
+			<string>Switch to the next output</string>
+		</dict>
+	</array>
 </dict>
 </plist>

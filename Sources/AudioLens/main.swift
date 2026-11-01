@@ -24,6 +24,9 @@ enum QuitConfirmation {
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
+    /// Links that arrive while AudioLens is still launching (the link that launched it), with
+    /// the bundle id of the app that was in front then; nil once launching is done.
+    private var pendingURLs: [(url: URL, frontmost: String?)]? = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = makeMainMenu()
@@ -42,6 +45,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         _ = CapturePermission.shared
         OutputDevices.shared.start()
         AudioEngine.shared.start()
+        // ToolHUD lights its Mute button while the app it would mute is muted.
+        ToolHUDFeatureStates.start {
+            ["mute": AudioEngine.shared.hotKeyTarget.map { SettingsStore.shared.app($0.id).muted } ?? false]
+        }
         MultiRoomStream.shared.apply()
         HotKeys.shared.apply()
 
@@ -82,10 +89,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         AutoUpdater.shared.start()
         UserDefaults.standard.set(true, forKey: "launchedBefore")
         // At login, AudioLens starts quietly in the background unless it has no icon to click.
+        // Launched by a link (ToolHUD's buttons), it does what the link asks and no more, so a
+        // volume button doesn't bring the window up over the app you're in.
         let atLogin = Self.launchedAsLoginItem
-        if newInstall || !atLogin || (!AppPresence.showInMenuBar && !AppPresence.showInDock) {
+        let early = pendingURLs ?? []
+        pendingURLs = nil
+        if newInstall || (early.isEmpty && (!atLogin || (!AppPresence.showInMenuBar && !AppPresence.showInDock))) {
             MainWindow.shared.show()
         }
+        for (url, frontmost) in early { run(url, frontmost: frontmost) }
     }
 
     /// Quitting asks first, while "Ask before quitting" is on in Settings › General. Not when
@@ -150,69 +162,82 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
-    /// For Shortcuts, scripts and our other apps:
-    ///
-    ///     audiolens://show                        the window
-    ///     audiolens://compact                     the compact panel
-    ///     audiolens://menubar                     the menu bar drop-down
-    ///     audiolens://settings                    Settings
-    ///     audiolens://volume?app=<bundle id>&value=<0–150>
-    ///     audiolens://mute?app=<bundle id>&on=<1|0>   (no "on" toggles)
-    ///     audiolens://eq?device=<UID|default>&preset=<name>&on=<1|0>
-    ///
-    /// `app` may also be `playing`, the app the hotkeys act on.
+    /// `audiolens://` links, for ToolHUD, Shortcuts, scripts and our other apps; `URLCommand`
+    /// lists them. Nothing here brings AudioLens forward unless the link opens a window, so
+    /// the app in front when the link arrives is still the one the hotkey actions see.
     func application(_ application: NSApplication, open urls: [URL]) {
-        for url in urls where url.scheme == "audiolens" {
-            let query = Dictionary(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
-                .compactMap { item in item.value.map { (item.name, $0) } } ?? [], uniquingKeysWith: { _, b in b })
-            switch url.host {
-            case "compact": MainWindow.shared.show(compact: true)
-            case "menubar":
-                // After the URL's own activation settles, or the transient popover closes at once.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-                    // With the icon in ToolHUD's menu there's nothing to hang it from.
-                    if MenuHub.shared.isHosted { return MainWindow.shared.show(compact: true) }
-                    guard let self, let button = self.statusItem?.button, self.statusItem?.isVisible == true else { return }
-                    if self.popover?.isShown != true { self.togglePopover(button) }
-                }
-            case "settings": SettingsWindow.shared.show()
-            case "volume", "mute": adjustApp(url.host!, query)
-            case "eq": adjustEQ(query)
-            default: MainWindow.shared.show()
+        // Captured now, before anything AudioLens does can change it.
+        let candidate = NSWorkspace.shared.frontmostApplication
+        let frontmost = candidate?.processIdentifier == ProcessInfo.processInfo.processIdentifier ? nil : candidate?.bundleIdentifier
+        if pendingURLs != nil {
+            // Launching: the engine hasn't looked for playing apps yet.
+            pendingURLs?.append(contentsOf: urls.map { ($0, frontmost) })
+            return
+        }
+        for url in urls { run(url, frontmost: frontmost) }
+    }
+
+    private func run(_ url: URL, frontmost: String?) {
+        guard let command = URLCommand(url: url) else { return }
+        switch command {
+        case .showWindow: MainWindow.shared.show()
+        case .compactPanel: MainWindow.shared.show(compact: true)
+        case .menuBarPanel:
+            // After the URL's own activation settles, or the transient popover closes at once.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                // With the icon in ToolHUD's menu there's nothing to hang it from.
+                if MenuHub.shared.isHosted { return MainWindow.shared.show(compact: true) }
+                guard let self, let button = self.statusItem?.button, self.statusItem?.isVisible == true else { return }
+                if self.popover?.isShown != true { self.togglePopover(button) }
             }
+        case .settings: SettingsWindow.shared.show()
+        case .nudge(let nudge):
+            let action: HotKeys.Action = switch nudge { case .up: .up; case .down: .down; case .mute: .mute }
+            HotKeys.shared.perform(action, on: AudioEngine.shared.hotKeyTarget(frontmost: frontmost))
+        case .nextOutput:
+            guard let device = OutputDevices.shared.makeNextDefault() else { return NSSound.beep() }
+            VolumeHUD.shared.show(device: device)
+        case .setVolume(let target, let percent):
+            adjustApp(target, frontmost: frontmost) { s, maxVolume in
+                guard let percent else { return }
+                s.volume = min(max(percent / 100, 0), maxVolume)
+                if percent > 0 { s.muted = false }
+            }
+        case .setMuted(let target, let muted):
+            adjustApp(target, frontmost: frontmost) { s, _ in s.muted = muted ?? !s.muted }
+        case .eq(let device, let preset, let enabled):
+            adjustEQ(device: device, preset: preset, enabled: enabled)
         }
     }
 
-    private func targetApp(_ query: [String: String]) -> (id: String, name: String?)? {
-        guard let key = query["app"] else { return nil }
-        if key == "playing" { return AudioEngine.shared.hotKeyTarget.map { ($0.id, $0.name) } }
-        let running = AudioEngine.shared.running.values.first { $0.id == key || $0.bundleID == key || $0.name == key }
-        return (running?.id ?? key, running?.name)
+    private func targetApp(_ target: URLCommand.Target, frontmost: String?) -> (id: String, name: String?)? {
+        switch target {
+        case .playing:
+            return AudioEngine.shared.hotKeyTarget(frontmost: frontmost).map { ($0.id, $0.name) }
+        case .app(let key):
+            let running = AudioEngine.shared.running.values.first { $0.id == key || $0.bundleID == key || $0.name == key }
+            return (running?.id ?? key, running?.name)
+        }
     }
 
-    private func adjustApp(_ action: String, _ query: [String: String]) {
-        guard let (id, name) = targetApp(query) else { return NSSound.beep() }
+    private func adjustApp(_ target: URLCommand.Target, frontmost: String?, _ change: (inout AppAudioSettings, Double) -> Void) {
+        guard let (id, name) = targetApp(target, frontmost: frontmost) else { return NSSound.beep() }
         let store = SettingsStore.shared
         store.updateApp(id) { s in
             if s.name == nil { s.name = name }
-            if action == "volume", let value = query["value"].flatMap(Double.init) {
-                s.volume = min(max(value / 100, 0), store.maxVolume)
-                if value > 0 { s.muted = false }
-            } else if action == "mute" {
-                s.muted = query["on"].map { $0 == "1" || $0 == "true" } ?? !s.muted
-            }
+            change(&s, store.maxVolume)
         }
     }
 
-    private func adjustEQ(_ query: [String: String]) {
+    private func adjustEQ(device: String?, preset name: String?, enabled: Bool?) {
         let devices = OutputDevices.shared
-        guard let uid = query["device"].flatMap({ $0 == "default" ? devices.defaultUID : $0 }) ?? devices.defaultUID else { return }
+        guard let uid = device.flatMap({ $0 == "default" ? devices.defaultUID : $0 }) ?? devices.defaultUID else { return }
         SettingsStore.shared.updateDevice(uid) { s in
-            if let name = query["preset"], let preset = EQPreset.all.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) {
+            if let name, let preset = EQPreset.all.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) {
                 s.eqGains = preset.gains
                 s.eqEnabled = true
             }
-            if let on = query["on"] { s.eqEnabled = on == "1" || on == "true" }
+            if let enabled { s.eqEnabled = enabled }
         }
     }
 

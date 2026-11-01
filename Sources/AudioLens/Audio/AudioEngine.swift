@@ -167,10 +167,13 @@ final class AudioEngine {
 
     /// The app hotkeys act on: the frontmost app if it's playing, otherwise the one that
     /// started playing most recently.
-    var hotKeyTarget: AudioApp? {
+    var hotKeyTarget: AudioApp? { hotKeyTarget(frontmost: NSWorkspace.shared.frontmostApplication?.bundleIdentifier) }
+
+    /// The same, with the frontmost app as it was when asked: a link that launches AudioLens
+    /// is answered once launching is done, when something else may be in front.
+    func hotKeyTarget(frontmost front: String?) -> AudioApp? {
         let audible = visibleApps.filter(isAudible)
-        if let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
-           let app = audible.first(where: { $0.bundleID == front }) { return app }
+        if let front, let app = audible.first(where: { $0.bundleID == front }) { return app }
         return audible.max { (lastPlayed[$0.id] ?? .distantPast) < (lastPlayed[$1.id] ?? .distantPast) }
     }
 
@@ -411,6 +414,9 @@ final class AudioEngine {
 
     /// Brings the pipelines in line with what each app needs.
     private func reconcile() {
+        // Every mute change and every rescan (once a second) end up here: the playing app,
+        // or whether it's muted, may have changed.
+        defer { ToolHUDFeatureStates.publish() }
         let allowed = CapturePermission.shared.isAuthorized
         var waiting = false
         let now = Date()

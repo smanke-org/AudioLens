@@ -84,7 +84,13 @@ final class HotKeys {
 
     fileprivate func fire(_ id: UInt32) {
         guard let action = Action(rawValue: id) else { return }
-        guard let app = AudioEngine.shared.hotKeyTarget else {
+        perform(action, on: AudioEngine.shared.hotKeyTarget)
+    }
+
+    /// What a hotkey does, also for `audiolens://volume-up`, `volume-down` and `mute`:
+    /// turns `app` up or down a step or toggles its mute, and shows the volume indicator.
+    func perform(_ action: Action, on target: AudioApp?) {
+        guard let app = target else {
             NSSound.beep()
             return
         }

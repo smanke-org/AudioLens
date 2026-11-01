@@ -2,7 +2,8 @@ import AppKit
 import AudioLensKit
 import SwiftUI
 
-/// A brief on-screen level, shown when a hotkey changes an app's volume.
+/// A brief on-screen level, shown when a hotkey changes an app's volume, or the new output
+/// after `audiolens://next-output`.
 @MainActor
 final class VolumeHUD {
     static let shared = VolumeHUD()
@@ -15,10 +16,22 @@ final class VolumeHUD {
     @MainActor
     final class HUDModel {
         var app: AudioApp?
+        var device: OutputDevice?
     }
 
     func show(app: AudioApp) {
+        model.device = nil
         model.app = app
+        present()
+    }
+
+    func show(device: OutputDevice) {
+        model.app = nil
+        model.device = device
+        present()
+    }
+
+    private func present() {
         if panel == nil {
             let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 300, height: 74),
                                 styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
@@ -75,6 +88,18 @@ final class VolumeHUD {
                         }
                         .frame(height: 6)
                     }
+                }
+                .padding(.horizontal, 16)
+                .frame(width: 300, height: 74)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            } else if let device = model.device {
+                HStack(spacing: 12) {
+                    Image(systemName: device.symbol).font(.system(size: 24)).frame(width: 34, height: 34)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Output").font(.caption).foregroundStyle(.secondary)
+                        Text(device.name).font(.callout.weight(.semibold)).lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 16)
                 .frame(width: 300, height: 74)

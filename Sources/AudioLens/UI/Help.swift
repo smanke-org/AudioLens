@@ -149,11 +149,21 @@ enum Help {
             .text("Set the keys and the step in Settings › Hotkeys: click a shortcut, then press the new keys. Delete clears it. If another app already uses a shortcut, Settings says so."),
         ]),
 
-        HelpTopic(id: "toolhud", title: "ToolHUD's Menu", symbol: "circle.circle", blocks: [
+        HelpTopic(id: "toolhud", title: "ToolHUD", symbol: "circle.circle", blocks: [
             .text("ToolHUD gathers the menu bar icons of the developer's apps into its own menu. While ToolHUD is running, AudioLens's menu becomes a submenu of ToolHUD's menu bar menu, and AudioLens's own icon leaves the menu bar."),
             .text("The submenu starts with Show Compact Panel, which opens the compact panel in its own window, since there's no menu bar icon for it to hang from. The rest is AudioLens's usual menu: Open AudioLens, AudioLens Help, Settings, updates, About and Quit."),
             .text("To keep AudioLens's icon in the menu bar, turn off \"Put in ToolHUD's menu while ToolHUD is running\" in Settings › General. If ToolHUD quits, the icon comes back right away."),
-            .tip("A ToolHUD keystroke button can press AudioLens's hotkeys, to turn the playing app up, down or mute it from ToolHUD's ring."),
+            .heading("Buttons on ToolHUD's ring"),
+            .text("A ToolHUD button can run these AudioLens actions. Choose AudioLens and the action in ToolHUD Settings › Buttons."),
+            .keys([
+                ("Open AudioLens", "Open the window"),
+                ("Show Compact Panel", "Open the compact panel"),
+                ("Turn the playing app up", "Up by {step}, as the hotkey does"),
+                ("Turn the playing app down", "Down by {step}"),
+                ("Mute or unmute the playing app", "Mute it, or unmute it"),
+                ("Switch to the next output", "Make the next device the system output"),
+            ]),
+            .text("The volume and mute buttons act on the playing app, as the hotkeys do: the app you're in if it's making sound, otherwise the app that started playing most recently. They don't bring AudioLens forward, and the volume indicator shows the result. Switch to the next output goes through your output devices in name order, skipping virtual devices such as meeting and recording apps' drivers, and shows the new output."),
         ]),
 
         HelpTopic(id: "sync", title: "Sync and Updates", symbol: "icloud", blocks: [
@@ -170,11 +180,15 @@ enum Help {
                 ("audiolens://compact", "Open the compact panel"),
                 ("audiolens://menubar", "Open the menu bar drop-down"),
                 ("audiolens://settings", "Open Settings"),
+                ("audiolens://volume-up", "Turn the playing app up, as the hotkey does"),
+                ("audiolens://volume-down", "Turn the playing app down"),
+                ("audiolens://mute", "Mute or unmute the playing app"),
+                ("audiolens://next-output", "Switch to the next output device"),
                 ("audiolens://volume?app=…&value=…", "Set an app's volume, 0 to 150"),
                 ("audiolens://mute?app=…&on=1", "Mute (on=0 unmutes; leave on out to toggle)"),
                 ("audiolens://eq?device=default&preset=…", "Choose an EQ preset for a device"),
             ]),
-            .text("For app=, use the app's bundle identifier, or playing for the app the hotkeys act on. For device=, use default for the current output."),
+            .text("For app=, use the app's bundle identifier, or playing for the app the hotkeys act on; leaving app= out means playing too. For device=, use default for the current output."),
         ]),
 
         HelpTopic(id: "troubleshooting", title: "Troubleshooting", symbol: "wrench.and.screwdriver", blocks: [
