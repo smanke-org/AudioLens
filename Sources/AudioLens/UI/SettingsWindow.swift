@@ -58,6 +58,13 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         window?.title = "AudioLens Settings"
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
+        // After an update whose notes weren't seen yet.
+        if let window { WhatsNew.shared.present(on: window) }
+    }
+
+    /// This version's release notes, when asked for from Settings.
+    func showWhatsNew() {
+        if let window { WhatsNew.shared.present(on: window, asked: true) }
     }
 
     #if DEBUG
@@ -405,7 +412,10 @@ struct UpdateSettings: View {
                     }
                 }
                 LabeledContent("Version \(AppInfo.displayVersion)") {
-                    Button("Check Now") { UpdateController.checkForUpdates() }
+                    HStack {
+                        Button("What's New…") { SettingsWindow.shared.showWhatsNew() }
+                        Button("Check Now") { UpdateController.checkForUpdates() }
+                    }
                 }
                 if let error = updater.lastError {
                     Text(error).font(.callout).foregroundStyle(.red)

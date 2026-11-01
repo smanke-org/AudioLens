@@ -35,6 +35,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         #if DEBUG
         // Before sync, the engine and the updater, so a test copy touches none of them.
         if DebugHooks.runQuitTest() { return }
+        // The update prompt, What's New and Settings drawn to PNGs; also starts nothing else.
+        if DebugUpdateNotes.run() { return }
         #endif
 
         // Set at the end of the first launch, so its absence means a brand-new install.

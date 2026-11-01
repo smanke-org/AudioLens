@@ -171,6 +171,9 @@ enum Help {
             .text("Each Mac keeps its own device volumes, window layout and open-at-login choice."),
             .heading("Updates"),
             .text("AudioLens checks for a new version once a day, or on the schedule you set in Settings › Updates. It can install automatically, ask first, or not check at all. Automatic installs wait until no adjusted app is playing and your Mac isn't in use."),
+            .heading("What's new"),
+            .text("The update window shows the notes for the latest releases, with the ones you don't have yet marked New. \"Don't remind me about this version\" is ticked to begin with: click Not Now with it ticked, and AudioLens stops reminding you about that version (Check Now still offers it). Untick it to be reminded again."),
+            .text("After an update that installed itself, Settings shows what changed the next time it opens. Tick \"Don't show this again\" to put it away. What's New… beside Check Now in Settings › Updates shows the notes any time."),
         ]),
 
         HelpTopic(id: "automation", title: "Automation", symbol: "gearshape.2", blocks: [
