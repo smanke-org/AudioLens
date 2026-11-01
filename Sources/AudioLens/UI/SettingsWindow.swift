@@ -48,7 +48,7 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
             window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
             window.toolbarStyle = .unified
             window.setContentSize(NSSize(width: 820, height: 600))
-            window.contentMinSize = NSSize(width: 700, height: 460)
+            window.contentMinSize = Self.minimumContentSize
             window.isReleasedWhenClosed = false
             window.setFrameAutosaveName("AudioLensSettings")
             window.delegate = self
@@ -60,6 +60,16 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         window?.makeKeyAndOrderFront(nil)
         // After an update whose notes weren't seen yet.
         if let window { WhatsNew.shared.present(on: window) }
+    }
+
+    /// The smallest the window can be dragged to. Also set as contentMinSize, but a window
+    /// whose content is a hosting controller drops that once it's shown, so a drag is held
+    /// to it in windowWillResize.
+    static let minimumContentSize = NSSize(width: 700, height: 460)
+
+    func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
+        let minimum = sender.frameRect(forContentRect: NSRect(origin: .zero, size: Self.minimumContentSize)).size
+        return NSSize(width: max(frameSize.width, minimum.width), height: max(frameSize.height, minimum.height))
     }
 
     /// This version's release notes, when asked for from Settings.

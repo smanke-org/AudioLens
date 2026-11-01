@@ -58,6 +58,10 @@ enum DebugUpdateNotes {
             render(SettingsWindow.shared.debugWindow, to: out.appending(path: "updates.png"))
             let window = SettingsWindow.shared.debugWindow
             note("settings resizable: \(window?.styleMask.contains(.resizable) == true) min \(window?.contentMinSize ?? .zero) content \(contentSize()) autosave '\(window?.frameAutosaveName ?? "")'")
+            // A drag to 100 x 100 is held at the smallest Settings allows.
+            if let window, let held = window.delegate?.windowWillResize?(window, to: NSSize(width: 100, height: 100)) {
+                note("drag to 100x100 held at content \(window.contentRect(forFrameRect: NSRect(origin: .zero, size: held)).size)")
+            }
 
             // Asked for from the What's New… button: this version's notes, no "Don't show" box.
             SettingsWindow.shared.showWhatsNew()
