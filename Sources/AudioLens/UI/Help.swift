@@ -146,7 +146,7 @@ enum Help {
                 ("{hotkey:mute}", "Mute or unmute it"),
             ]),
             .text("The playing app is the frontmost app if it's making sound, otherwise the app that started playing most recently. A volume indicator shows the app and its new level."),
-            .text("Set the keys and the step in Settings › Hotkeys: click a shortcut, then press the new keys. Delete clears it. If another app already uses a shortcut, Settings says so."),
+            .text("Set the keys and the step in Settings › Hotkeys: click a shortcut, then press the new keys. Delete clears it. If another app already uses a shortcut, Settings says so. Your hotkeys also show up in ShortcutsLens."),
         ]),
 
         HelpTopic(id: "toolhud", title: "ToolHUD", symbol: "circle.circle", blocks: [
@@ -164,6 +164,7 @@ enum Help {
                 ("Switch to the next output", "Make the next device the system output"),
             ]),
             .text("The volume and mute buttons act on the playing app, as the hotkeys do: the app you're in if it's making sound, otherwise the app that started playing most recently. They don't bring AudioLens forward, and the volume indicator shows the result. Switch to the next output goes through your output devices in name order, skipping virtual devices such as meeting and recording apps' drivers, and shows the new output."),
+            .text("While \"Show which features are on\" is turned on in ToolHUD, the mute button lights up while the playing app is muted."),
         ]),
 
         HelpTopic(id: "sync", title: "Sync and Updates", symbol: "icloud", blocks: [

@@ -27,7 +27,7 @@ Requires macOS 26 or later.
 - **Pin and ignore.** Pin an app to keep it listed while it's silent. Ignore an app and AudioLens leaves it completely alone.
 - **Several outputs at once.** Play on the Mac's speakers and an AirPlay HomePod (or any outputs) together. AudioLens holds the faster outputs back to match AirPlay's delay, with a sync slider to fine-tune. Several HomePods join together through Control Center as one AirPlay output.
 - **AirPlay.** HomePods, Apple TVs and other AirPlay speakers on your network are listed with a Connect button. macOS only lets its own Sound settings connect them, so Connect opens Sound settings and shows which speaker to click. Once connected, a speaker is an ordinary output with its own remembered volume and EQ.
-- **Global hotkeys.** Turn the playing app up or down, or mute it, from anywhere (⌃⌥↑, ⌃⌥↓, ⌃⌥M by default).
+- **Global hotkeys.** Turn the playing app up or down, or mute it, from anywhere (⌃⌥↑, ⌃⌥↓, ⌃⌥M by default). They also show up in ShortcutsLens.
 - **Choose your layout.** Source List (the default), Mixing Desk, Dial Board or Device Inspector, from Settings or the View menu (⌘1 to ⌘4). Any of them shrinks to the compact panel with ⇧⌘C, and the menu bar icon opens the same compact panel.
 - **Dock, menu bar, both or neither.** Turn either icon off in Settings. With both off, open AudioLens again from Applications or Spotlight to get the window back.
 - **Encrypted sync.** Turn on sync to keep app volumes, device EQ and options the same on all your Macs through iCloud Drive, end-to-end encrypted with your own passphrase. Device volumes and the window layout stay per Mac.
@@ -55,6 +55,8 @@ When AudioLens quits, every app goes straight back to normal macOS output, at th
 
 AudioLens checks GitHub for new versions once a day (you can change how often, or turn it off, in Settings › Updates). It can ask first or install automatically. Automatic installs wait until no adjusted app is playing and your Mac is idle, and every download must be signed by the same developer and notarized by Apple before it's installed.
 
+The update window shows the notes for the latest releases, with the ones you don't have yet marked New, and What's New… in Settings › Updates shows them any time.
+
 ## Automation
 
 - `audiolens://show` opens the window, `audiolens://compact` the compact panel, `audiolens://settings` Settings.
@@ -62,7 +64,7 @@ AudioLens checks GitHub for new versions once a day (you can change how often, o
 - `audiolens://next-output` makes the next output device (in name order, skipping virtual devices) the system output.
 - `audiolens://volume?app=<bundle id>&value=<0–150>`, `audiolens://mute?app=<bundle id>&on=<1|0>` and `audiolens://eq?device=default&preset=<name>` set one app's volume or mute, or a device's EQ. `app=playing`, or no `app`, means the playing app.
 
-[ToolHUD](https://github.com/smanke-org/ToolHUD) lists AudioLens's ring actions on its own: Open AudioLens, Show Compact Panel, Turn the playing app up, Turn the playing app down, Mute or unmute the playing app, and Switch to the next output.
+[ToolHUD](https://github.com/smanke-org/ToolHUD) lists AudioLens's ring actions on its own: Open AudioLens, Show Compact Panel, Turn the playing app up, Turn the playing app down, Mute or unmute the playing app, and Switch to the next output. The mute button lights up while the playing app is muted.
 
 ## Building
 
