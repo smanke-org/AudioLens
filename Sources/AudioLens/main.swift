@@ -53,6 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         MultiRoomStream.shared.apply()
         HotKeys.shared.apply()
+        ShortcutsLensReport.start { HotKeys.shared.reportedShortcuts }
 
         setUpStatusItem()
         // ToolHUD can take the menu into its own while it runs.

@@ -67,6 +67,22 @@ final class HotKeys {
             }
         }
         failed = failures
+        ShortcutsLensReport.publish()
+    }
+
+    /// For ShortcutsLens: the shortcuts that registered, named as Settings names them.
+    var reportedShortcuts: [ShortcutsLensReport.Shortcut] {
+        guard !paused else { return [] }
+        let store = SettingsStore.shared
+        let all: [(Action, String, String, Shortcut?)] = [
+            (.up, "volumeUp", "Turn the playing app up", store.hotKeyUp),
+            (.down, "volumeDown", "Turn the playing app down", store.hotKeyDown),
+            (.mute, "mute", "Mute or unmute the playing app", store.hotKeyMute),
+        ]
+        return all.compactMap { action, id, title, key in
+            guard let key, !isFailed(action) else { return nil }
+            return .init(id: id, title: title, keyCode: Int(key.keyCode), carbonModifiers: Int(key.carbonModifiers))
+        }
     }
 
     func isFailed(_ action: Action) -> Bool { failed.contains(action.rawValue) }
