@@ -68,7 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard let self else { return menu }
             menuNeedsUpdate(menu)
             menu.insertItem(.separator(), at: 0)
-            menu.insertItem(item("Show Compact Panel", #selector(showCompactPanel)), at: 0)
+            menu.insertItem(item("Show Compact Panel", #selector(showCompactPanel)).showIcon("arrow.down.right.and.arrow.up.left"), at: 0)
             return menu
         }, icon: { [weak self] in self?.statusItem?.button?.image })
 
@@ -322,18 +322,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         // The status item's menu, for a right-click or Control-click.
-        menu.addItem(item("Open AudioLens", #selector(showWindow)))
+        menu.addItem(item("Open AudioLens", #selector(showWindow)).showIcon("slider.horizontal.3"))
         let helpEntry = item("AudioLens Help", #selector(showHelp))
         helpEntry.image = NSImage(systemSymbolName: "questionmark.circle", accessibilityDescription: nil)
         menu.addItem(helpEntry)
-        menu.addItem(item("Settings…", #selector(showSettings), key: ","))
+        menu.addItem(item("Settings…", #selector(showSettings), key: ",").showIcon("gearshape"))
         menu.addItem(.separator())
         if let staged = AutoUpdater.shared.staged {
-            menu.addItem(item("Update to \(staged.version) Now (Otherwise Installs When Idle)", #selector(installUpdateNow)))
+            menu.addItem(item("Update to \(staged.version) Now (Otherwise Installs When Idle)", #selector(installUpdateNow)).showIcon("arrow.down.circle"))
         } else if let pending = UpdateAvailability.shared.pending {
-            menu.addItem(item("Update to \(pending)…", #selector(checkForUpdates)))
+            menu.addItem(item("Update to \(pending)…", #selector(checkForUpdates)).showIcon("arrow.down.circle"))
         } else {
-            menu.addItem(item("Check for Updates…", #selector(checkForUpdates)))
+            menu.addItem(item("Check for Updates…", #selector(checkForUpdates)).showIcon("arrow.down.circle"))
         }
         menu.addItem(item("About AudioLens", #selector(showAbout)))
         menu.addItem(item("Our other apps…", #selector(showOtherApps)))
