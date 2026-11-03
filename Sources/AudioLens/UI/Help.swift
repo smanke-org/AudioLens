@@ -193,6 +193,15 @@ enum Help {
                 ("audiolens://eq?device=default&preset=…", "Choose an EQ preset for a device"),
             ]),
             .text("For app=, use the app's bundle identifier, or playing for the app the hotkeys act on; leaving app= out means playing too. For device=, use default for the current output."),
+            .heading("Command line and AI agents"),
+            .text("AudioLens is also a command line tool, so scripts and AI agents such as Claude Code or Codex can list the apps playing and your outputs, and set an app's volume, mute or output, a device's volume and EQ, the system output, several outputs at once and multi-room AirPlay. Commands run in the open app, and the window shows each change at once. Changes you hear can be tried first with --dry-run."),
+            .keys([
+                ("audiolens help", "List every command and its options"),
+                ("audiolens apps list", "The apps playing, with their volume, mute and output"),
+                ("audiolens apps set <app> --volume 40", "Set an app's volume, as its slider does"),
+                ("audiolens mcp", "Offer the same commands to MCP apps, such as Claude Desktop"),
+            ]),
+            .text("To type audiolens in Terminal, link it once: ln -s /Applications/AudioLens.app/Contents/MacOS/AudioLens ~/.local/bin/audiolens (with ~/.local/bin on your PATH). MCP apps take the full path to that program, followed by mcp."),
         ]),
 
         HelpTopic(id: "troubleshooting", title: "Troubleshooting", symbol: "wrench.and.screwdriver", blocks: [

@@ -2,10 +2,15 @@ import AppKit
 import AudioLensKit
 import SwiftUI
 
+// `audiolens <command>` (the app binary under a short name): run it against the running app
+// and exit, without starting a second copy. See Agent/AgentCLI.swift.
+if let code = AgentCLI.runIfRequested() { exit(code) }
+
 let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate
-app.setActivationPolicy(AppPresence.showInDock ? .regular : .accessory)
+// An agent CLI test copy has no Dock icon.
+app.setActivationPolicy(AppPresence.showInDock && !AgentSocket.isTestRun ? .regular : .accessory)
 app.run()
 
 /// Quits AudioLens without asking: for quitting itself (installing an update, ending a test).
@@ -33,6 +38,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         SettingsStore.shared.applyAppearance()
 
         #if DEBUG
+        // A test run of the agent CLI (APP_STORE): settings of its own and the agent socket.
+        // Nothing else starts: no engine or taps, devices, AirPlay, sync, hotkeys, menu bar
+        // item, ToolHUD menu hub, ShortcutsLens report, updater or permission prompt.
+        if AgentSocket.isTestRun {
+            _ = SettingsStore.shared
+            AgentSocket.listen { AgentRouter.handle($0) }
+            return
+        }
         // Before sync, the engine and the updater, so a test copy touches none of them.
         if DebugHooks.runQuitTest() { return }
         // The update prompt, What's New and Settings drawn to PNGs; also starts nothing else.
@@ -47,6 +60,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         _ = CapturePermission.shared
         OutputDevices.shared.start()
         AudioEngine.shared.start()
+        // `audiolens` and its MCP server talk to the app through this.
+        AgentSocket.listen { AgentRouter.handle($0) }
         // ToolHUD lights its Mute button while the app it would mute is muted.
         ToolHUDFeatureStates.start {
             ["mute": AudioEngine.shared.hotKeyTarget.map { SettingsStore.shared.app($0.id).muted } ?? false]
@@ -94,10 +109,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // At login, AudioLens starts quietly in the background unless it has no icon to click.
         // Launched by a link (ToolHUD's buttons), it does what the link asks and no more, so a
         // volume button doesn't bring the window up over the app you're in.
+        // Started by `audiolens` for a command, the same: the command runs, the window stays shut.
         let atLogin = Self.launchedAsLoginItem
+        let forAgent = ProcessInfo.processInfo.environment["AUDIOLENS_AGENT_LAUNCH"] != nil
         let early = pendingURLs ?? []
         pendingURLs = nil
-        if newInstall || (early.isEmpty && (!atLogin || (!AppPresence.showInMenuBar && !AppPresence.showInDock))) {
+        if newInstall || (early.isEmpty && !forAgent && (!atLogin || (!AppPresence.showInMenuBar && !AppPresence.showInDock))) {
             MainWindow.shared.show()
         }
         for (url, frontmost) in early { run(url, frontmost: frontmost) }

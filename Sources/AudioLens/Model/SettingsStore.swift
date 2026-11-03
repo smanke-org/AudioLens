@@ -114,7 +114,18 @@ final class SettingsStore {
 
     var maxVolume: Double { allowBoost ? AppAudioSettings.maxBoost : 1 }
 
-    @ObservationIgnored private let defaults = UserDefaults.standard
+    @ObservationIgnored private let defaults = SettingsStore.makeDefaults()
+
+    /// The defaults suite of an agent CLI test copy (a Debug build run with APP_STORE), which
+    /// shares the installed app's bundle ID and so, otherwise, its settings.
+    static let agentTestSuite = "com.smanke.AudioLens.agenttest"
+
+    private static func makeDefaults() -> UserDefaults {
+        #if DEBUG
+        if AgentSocket.isTestRun, let suite = UserDefaults(suiteName: agentTestSuite) { return suite }
+        #endif
+        return .standard
+    }
     @ObservationIgnored private var loading = false
 
     private init() { load() }
@@ -186,7 +197,7 @@ final class SettingsStore {
         // every run, so their settings last only as long as the process.
         let lasting = apps.filter { !$0.key.hasPrefix("pid:") }
         defaults.set((try? JSONEncoder().encode(lasting)) ?? Data(), forKey: Key.apps)
-        if !loading { SettingsSync.shared.localDidChange() }
+        if !loading { syncedSettingChanged() }
     }
 
     private func capBoosts() {
@@ -261,7 +272,7 @@ final class SettingsStore {
             || s.correction != devices[key]?.correction
         devices[key] = s
         defaults.set((try? JSONEncoder().encode(devices)) ?? Data(), forKey: Key.devices)
-        if !loading { SettingsSync.shared.localDidChange() }
+        if !loading { syncedSettingChanged() }
         if soundChanged { AudioEngine.shared.eqChanged(deviceUID: key) }
     }
 
@@ -273,7 +284,7 @@ final class SettingsStore {
         defaults.set((try? JSONEncoder().encode(devices)) ?? Data(), forKey: Key.devices)
         defaults.set(deviceVolumes, forKey: Key.deviceVolumes)
         output.members.removeAll { $0 == key }
-        SettingsSync.shared.localDidChange()
+        syncedSettingChanged()
     }
 
     func savedVolume(for uid: String) -> Double? { deviceVolumes[memoryKey(uid)] }
@@ -319,7 +330,8 @@ final class SettingsStore {
         didSet {
             guard multiRoom != oldValue, !loading else { return }
             defaults.set((try? JSONEncoder().encode(multiRoom)) ?? Data(), forKey: Key.multiRoom)
-            MultiRoomStream.shared.apply()
+            // A test copy never starts the stream (AirPlay) or rebuilds taps.
+            if !AgentSocket.isTestRun { MultiRoomStream.shared.apply() }
             AudioEngine.shared.groupChanged()
         }
     }
@@ -334,16 +346,23 @@ final class SettingsStore {
 
     // MARK: - Saving
 
+    /// Tells sync a synced setting changed. Not in an agent CLI test copy: sync reads the
+    /// keychain and writes to the installed app's defaults.
+    private func syncedSettingChanged() {
+        if AgentSocket.isTestRun { return }
+        SettingsSync.shared.localDidChange()
+    }
+
     private func save(_ value: Any, _ key: String, _ changed: Bool) {
         guard changed, !loading else { return }
         defaults.set(value, forKey: key)
-        SettingsSync.shared.localDidChange()
+        syncedSettingChanged()
     }
 
     private func saveShortcut(_ value: Shortcut?, _ key: String, _ changed: Bool) {
         guard changed, !loading else { return }
         defaults.set(value.flatMap { try? JSONEncoder().encode($0) } ?? Data(), forKey: key)
-        SettingsSync.shared.localDidChange()
+        syncedSettingChanged()
         HotKeys.shared.apply()
     }
 
@@ -351,7 +370,7 @@ final class SettingsStore {
     func resetToDefaults() {
         for key in Self.syncedKeys { defaults.removeObject(forKey: key) }
         load()
-        SettingsSync.shared.localDidChange()
+        syncedSettingChanged()
         AudioEngine.shared.settingsChanged(appID: nil)
         AudioEngine.shared.eqChanged(deviceUID: nil)
         HotKeys.shared.apply()

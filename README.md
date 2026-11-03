@@ -64,6 +64,27 @@ The update window shows the notes for the latest releases, with the ones you don
 - `audiolens://next-output` makes the next output device (in name order, skipping virtual devices) the system output.
 - `audiolens://volume?app=<bundle id>&value=<0–150>`, `audiolens://mute?app=<bundle id>&on=<1|0>` and `audiolens://eq?device=default&preset=<name>` set one app's volume or mute, or a device's EQ. `app=playing`, or no `app`, means the playing app.
 
+### Command line and AI agents
+
+AudioLens is also a command line tool, so scripts and AI agents (Claude Code, Codex) can list the apps playing and your output devices, and set an app's volume, mute or output, a device's volume and EQ, the system output, several outputs at once and multi-room AirPlay. Commands run in the open app, and the window shows each change at once. Link it once to type `audiolens`:
+
+```bash
+ln -s /Applications/AudioLens.app/Contents/MacOS/AudioLens ~/.local/bin/audiolens
+```
+
+```bash
+audiolens help
+audiolens apps list --json
+audiolens apps set com.example.player --volume 40
+audiolens outputs set system --eq-preset "Late Night" --dry-run
+```
+
+Every command takes `--json`. Commands that change what you hear take `--dry-run` to show the change first. For MCP apps such as Claude Desktop, the same commands are served by `/Applications/AudioLens.app/Contents/MacOS/AudioLens mcp`:
+
+```bash
+claude mcp add --scope user audiolens -- /Applications/AudioLens.app/Contents/MacOS/AudioLens mcp
+```
+
 [ToolHUD](https://github.com/smanke-org/ToolHUD) lists AudioLens's ring actions on its own: Open AudioLens, Show Compact Panel, Turn the playing app up, Turn the playing app down, Mute or unmute the playing app, and Switch to the next output. The mute button lights up while the playing app is muted.
 
 ## Building

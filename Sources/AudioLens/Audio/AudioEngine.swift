@@ -210,6 +210,7 @@ final class AudioEngine {
 
     /// The multi-room stream's delay changed: the Mac's own output follows it.
     func streamDelayChanged() {
+        if AgentSocket.isTestRun { return }
         let delay = MultiRoomStream.shared.macDelay
         for pipeline in pipelines.values { pipeline.setStreamDelay(seconds: delay) }
     }
@@ -233,6 +234,7 @@ final class AudioEngine {
 
     /// The group changed: fine-tuning applies live; anything else rebuilds the taps.
     func groupChanged() {
+        if AgentSocket.isTestRun { return }
         let offset = SettingsStore.shared.output.syncOffsetMs
         for pipeline in pipelines.values where pipeline.deviceUIDs.count > 1 { pipeline.setSyncOffset(offset) }
         reconcile()
@@ -376,6 +378,8 @@ final class AudioEngine {
     // MARK: - Taps
 
     func settingsChanged(appID: String?) {
+        // An agent CLI test copy changes its own settings only: no taps, no permission prompt.
+        if AgentSocket.isTestRun { return }
         // Asked for by the user: if this is the first tap, now is the time to ask for permission.
         if let appID, needsTap(appID), !CapturePermission.shared.isAuthorized, !asked {
             asked = true
@@ -385,6 +389,7 @@ final class AudioEngine {
     }
 
     func eqChanged(deviceUID: String?) {
+        if AgentSocket.isTestRun { return }
         let store = SettingsStore.shared
         for pipeline in pipelines.values
         where deviceUID == nil || pipeline.deviceUIDs.contains(where: { store.memoryKey($0) == deviceUID }) {
