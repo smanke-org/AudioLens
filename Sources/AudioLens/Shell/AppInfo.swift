@@ -34,7 +34,6 @@ enum AppInfo {
     /// The About panel, with the beta label.
     @MainActor
     static func showAbout() {
-        NSApp.activate(ignoringOtherApps: true)
-        NSApp.orderFrontStandardAboutPanel(options: [.applicationVersion: labeledVersion, .version: ""])
+        AboutWindow.shared.show()
     }
 }
