@@ -40,10 +40,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         #if DEBUG
         // A test run of the agent CLI (APP_STORE): settings of its own and the agent socket.
         // Nothing else starts: no engine or taps, devices, AirPlay, sync, hotkeys, menu bar
-        // item, ToolHUD menu hub, ShortcutsLens report, updater or permission prompt.
+        // item, ToolHUD menu hub, ShortcutsLens report (unless asked for below), updater or
+        // permission prompt.
         if AgentSocket.isTestRun {
             _ = SettingsStore.shared
             AgentSocket.listen { AgentRouter.handle($0) }
+            // AUDIOLENS_TEST_SHORTCUTS: also the hotkeys and the ShortcutsLens report, on the
+            // test suite's settings, to test ShortcutsLens's Change Shortcut without the engine.
+            if ProcessInfo.processInfo.environment["AUDIOLENS_TEST_SHORTCUTS"] != nil {
+                HotKeys.shared.apply()
+                HotKeys.shared.startShortcutsLensReport()
+            }
             return
         }
         // Before sync, the engine and the updater, so a test copy touches none of them.
@@ -68,7 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         MultiRoomStream.shared.apply()
         HotKeys.shared.apply()
-        ShortcutsLensReport.start { HotKeys.shared.reportedShortcuts }
+        HotKeys.shared.startShortcutsLensReport()
 
         setUpStatusItem()
         // ToolHUD can take the menu into its own while it runs.
