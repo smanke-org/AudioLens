@@ -140,6 +140,7 @@ enum DebugHooks {
             up.performClick(nil)
             try? await Task.sleep(for: .milliseconds(300))
             guard let model = up.debugModel else { return finish(dir, out + ["editor did not open"]) }
+            line("hotkeys off while open: \(HotKeys.shared.reportedShortcuts.isEmpty && HotKeys.shared.failed.isEmpty)")
             line("opened: shown \(up.debugShown) title \(up.debugTitle); starts as \(model.combo?.display ?? "-")")
             model.control = false; model.option = false; model.shift = false; model.command = false
             model.typed("+")
@@ -152,7 +153,13 @@ enum DebugHooks {
             model.typed("kj")
             line("typed kj: key \(model.keyText)")
             model.choose(UInt16(kVK_F6))
-            line("F6 alone: combo \(model.combo?.display ?? "-") problem \(model.problem ?? "-")")
+            model.typed(model.keyText)
+            line("F6 alone: key \(model.keyText) combo \(model.combo?.display ?? "-") problem \(model.problem ?? "-")")
+            model.choose(UInt16(kVK_Space))
+            model.typed(model.keyText)
+            line("Space from the menu: key \(model.keyText)")
+            let named = [kVK_Delete, kVK_ForwardDelete, kVK_Home, kVK_End, kVK_PageUp, kVK_PageDown].map { EditorKeys.name(UInt16($0)) }
+            line("named keys: \(named.joined(separator: " "))")
             model.typed("éé")
             line("not on keyboard: problem \(model.problem ?? "-")")
             if let down = key([.control, .option], 58, .flagsChanged), let upEvent = key([], 58, .flagsChanged) {
@@ -173,6 +180,7 @@ enum DebugHooks {
                 line("shot \(Int(view.bounds.width))x\(Int(view.bounds.height))")
             }
             model.finish?(.set(model.combo))
+            line("right after Set: editor open \(up.debugModel != nil) title \(up.debugTitle) hotkeys back on \(!HotKeys.shared.reportedShortcuts.isEmpty || !HotKeys.shared.failed.isEmpty)")
             try? await Task.sleep(for: .milliseconds(1500))
             line("after Set: up \(store.hotKeyUp?.display ?? "none") down \(store.hotKeyDown?.display ?? "none") mute \(store.hotKeyMute?.display ?? "none"); titles \(buttons.map(\.debugTitle)); editor open \(up.debugModel != nil) shown \(up.debugShown)")
             up.performClick(nil)

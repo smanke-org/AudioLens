@@ -85,14 +85,20 @@ struct ShortcutRecorder: NSViewRepresentable {
                 shortcut = key
                 onChange?(key)
             }
-            popover?.close()
+            // Clean up now: the close message can come late, or never while AudioLens isn't
+            // frontmost, which would leave the hotkeys off.
+            let shown = popover
+            closed()
+            shown?.close()
         }
 
+        /// Runs once per editor: from finish, or when the popover closes on its own.
         private func closed() {
+            guard let popover else { return }
             if let monitor { NSEvent.removeMonitor(monitor) }
             monitor = nil
-            if let popover { PopoverCloser.shared.onClose[ObjectIdentifier(popover)] = nil }
-            popover = nil
+            PopoverCloser.shared.onClose[ObjectIdentifier(popover)] = nil
+            self.popover = nil
             model = nil
             refresh()
             // The binding writes the settings synchronously, so this registers the new keys.
@@ -188,10 +194,11 @@ struct ShortcutRecorder: NSViewRepresentable {
 
     /// The key box changed: keep the last character typed and find its key.
     func typed(_ text: String) {
+        // A named key from the menu ("F6", "Space") stays whole.
+        if let code = keyCode, EditorKeys.name(code) == text { keyText = text; return }
         if text.count > 1, let last = text.last { typed(String(last)); return }
         keyText = text
         guard !text.isEmpty else { keyCode = nil; return }
-        if let code = keyCode, EditorKeys.name(code) == text { return }
         if let found = EditorKeys.keyCode(for: text) {
             keyCode = found.code
             if found.needsShift { shift = true }
