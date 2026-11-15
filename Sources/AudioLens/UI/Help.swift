@@ -146,7 +146,7 @@ enum Help {
                 ("{hotkey:mute}", "Mute or unmute it"),
             ]),
             .text("The playing app is the frontmost app if it's making sound, otherwise the app that started playing most recently. A volume indicator shows the app and its new level."),
-            .text("Set the keys and the step in Settings › Hotkeys: click a shortcut, then press the new keys. Delete clears it. If another app already uses a shortcut, Settings says so. Your hotkeys also show up in ShortcutsLens."),
+            .text("Set the keys and the step in Settings › Hotkeys. Click a shortcut to open its editor: turn on the modifier keys (⌃ ⌥ ⇧ ⌘), type a letter, number or symbol, or pick Space, an arrow or an F-key from the keyboard menu — or just press the shortcut. Shortcuts need ⌘, ⌥ or ⌃, except F-keys. If another AudioLens shortcut has the keys, they move to this one and the other is cleared. Clear removes a shortcut. If another app already uses a shortcut, Settings says so. Your hotkeys also show up in ShortcutsLens."),
         ]),
 
         HelpTopic(id: "toolhud", title: "ToolHUD", symbol: "circle.circle", blocks: [
@@ -210,7 +210,7 @@ enum Help {
             .heading("An app isn't listed"),
             .text("Only apps that are playing, recent apps and pinned apps are listed. If it still doesn't appear, check Settings › Apps: it may be ignored."),
             .heading("A hotkey does nothing"),
-            .text("Another app may use the same keys. Settings › Hotkeys shows a warning; record a different shortcut."),
+            .text("Another app may use the same keys. Settings › Hotkeys shows a warning; click the shortcut and set different keys."),
             .heading("An AirPlay speaker isn't listed"),
             .text("Make sure it's on and on the same network. macOS connects AirPlay speakers itself, so if Connect doesn't work, choose the speaker in Control Center › Sound."),
         ]),

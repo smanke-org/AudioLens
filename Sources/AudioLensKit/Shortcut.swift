@@ -101,6 +101,12 @@ public enum KeyNames {
         return nil
     }
 
+    /// F1–F20 may stand alone as a shortcut: no app types with them.
+    public static func isFunctionKey(_ keyCode: UInt16) -> Bool { fKeys[keyCode] != nil }
+
+    /// The F-key codes, F1 first.
+    public static let functionKeyCodes: [UInt16] = fKeys.sorted { $0.value < $1.value }.map(\.key)
+
     /// The label a special key reads as, or nil for an ordinary character key.
     public static func label(of keyCode: UInt16) -> String? {
         if let f = fKeys[keyCode] { return "F\(f)" }
@@ -132,6 +138,28 @@ public enum SystemShortcuts {
         (20, [.command, .shift], "screenshots"),
         (21, [.command, .shift], "screenshots"),
         (23, [.command, .shift], "screenshots"),
+        (22, [.command, .shift], "Touch Bar screenshots"),
+        (20, [.command, .shift, .control], "screenshots"),
+        (21, [.command, .shift, .control], "screenshots"),
+        (46, [.command], "Minimize"),
+        (KeyCode.escape, [.command, .option], "Force Quit"),
+        (12, [.command, .control], "Lock Screen"),
+        (3, [.command, .control], "full screen"),
+        (KeyCode.d, [.command, .option], "showing the Dock"),
+        (KeyCode.up, [.control], "Mission Control"),
+        (KeyCode.down, [.control], "App Exposé"),
+        (KeyCode.left, [.control], "switching Spaces"),
+        (KeyCode.right, [.control], "switching Spaces"),
+        (KeyCode.c, [.command], "Copy"),
+        (KeyCode.v, [.command], "Paste"),
+        (7, [.command], "Cut"),
+        (6, [.command], "Undo"),
+        (KeyCode.a, [.command], "Select All"),
+        (KeyCode.s, [.command], "Save"),
+        (KeyCode.n, [.command], "New"),
+        (31, [.command], "Open"),
+        (35, [.command], "Print"),
+        (KeyCode.comma, [.command], "Settings"),
     ]
 
     /// What macOS uses this shortcut for, if anything.

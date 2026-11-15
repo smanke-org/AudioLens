@@ -286,4 +286,19 @@ import Testing
         let virtualOnly: [OutputCycle.Candidate] = [.init(uid: "a", name: "A", isVirtual: true), .init(uid: "b", name: "B", isVirtual: true)]
         #expect(OutputCycle.next(after: "a", in: virtualOnly) == "b")
     }
+
+    @Test func fKeysMayStandAloneAndAreListedInOrder() {
+        #expect(KeyNames.isFunctionKey(122))
+        #expect(KeyNames.isFunctionKey(90))
+        #expect(!KeyNames.isFunctionKey(KeyCode.a))
+        #expect(KeyNames.functionKeyCodes.count == 20)
+        #expect(KeyNames.functionKeyCodes.first == 122)
+        #expect(KeyNames.functionKeyCodes.last == 90)
+    }
+
+    @Test func commonMacShortcutsAreKnown() {
+        #expect(SystemShortcuts.purpose(of: Shortcut(keyCode: KeyCode.c, modifiers: [.command], key: "C")) == "Copy")
+        #expect(SystemShortcuts.purpose(of: Shortcut(keyCode: KeyCode.space, modifiers: [.command], key: "Space")) == "Spotlight")
+        #expect(SystemShortcuts.purpose(of: Shortcut(keyCode: KeyCode.up, modifiers: [.control, .option], key: "↑")) == nil)
+    }
 }

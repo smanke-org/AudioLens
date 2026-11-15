@@ -45,6 +45,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if AgentSocket.isTestRun {
             _ = SettingsStore.shared
             AgentSocket.listen { AgentRouter.handle($0) }
+            // AUDIOLENS_DEBUG_SHORTCUT_TEST: the shortcut editor's self-test, on the test settings.
+            if DebugHooks.runShortcutEditorTest() { return }
             // AUDIOLENS_TEST_SHORTCUTS: also the hotkeys and the ShortcutsLens report, on the
             // test suite's settings, to test ShortcutsLens's Change Shortcut without the engine.
             if ProcessInfo.processInfo.environment["AUDIOLENS_TEST_SHORTCUTS"] != nil {

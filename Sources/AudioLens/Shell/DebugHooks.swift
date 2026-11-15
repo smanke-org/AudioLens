@@ -1,5 +1,7 @@
 #if DEBUG
 import AppKit
+import Carbon.HIToolbox
+import SwiftUI
 import AudioLensKit
 
 /// Debug-build switches for testing and screenshots, set in the environment:
@@ -96,6 +98,106 @@ enum DebugHooks {
             click("Quit")
         default: break
         }
+    }
+
+    /// `AUDIOLENS_DEBUG_SHORTCUT_TEST=<folder>` (only in an APP_STORE test copy, whose settings
+    /// are the test suite's): puts Settings › Hotkeys in a window off screen, opens the shortcut
+    /// editor on "Turn the playing app up" and checks it: "+" becomes ⇧=, a bare letter is
+    /// refused, an F-key may stand alone, modifiers pressed and let go with no key show the
+    /// hint, pressing the mute shortcut's keys moves them, and Clear clears. Writes result.txt
+    /// and editor.png (the popover drawn with cacheDisplay) to the folder.
+    @MainActor
+    static func runShortcutEditorTest() -> Bool {
+        guard AgentSocket.isTestRun,
+              let folder = ProcessInfo.processInfo.environment["AUDIOLENS_DEBUG_SHORTCUT_TEST"] else { return false }
+        let dir = URL(fileURLWithPath: folder)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let store = SettingsStore.shared
+        store.hotKeyUp = SettingsStore.defaultUp
+        store.hotKeyDown = SettingsStore.defaultDown
+        store.hotKeyMute = SettingsStore.defaultMute
+        let window = NSWindow(contentRect: NSRect(x: -6000, y: -6000, width: 640, height: 360),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = NSHostingView(rootView: HotkeySettings())
+        window.setFrameOrigin(NSPoint(x: -6000, y: -6000))
+        window.orderFrontRegardless()
+        Task { @MainActor in
+            var out: [String] = []
+            func line(_ s: String) { out.append(s) }
+            func recorders(in view: NSView) -> [ShortcutRecorder.RecorderButton] {
+                ((view as? ShortcutRecorder.RecorderButton).map { [$0] } ?? []) + view.subviews.flatMap(recorders)
+            }
+            func key(_ flags: NSEvent.ModifierFlags, _ code: UInt16, _ type: NSEvent.EventType = .keyDown) -> NSEvent? {
+                NSEvent.keyEvent(with: type, location: .zero, modifierFlags: flags, timestamp: 0,
+                                 windowNumber: window.windowNumber, context: nil, characters: "",
+                                 charactersIgnoringModifiers: "", isARepeat: false, keyCode: code)
+            }
+            try? await Task.sleep(for: .milliseconds(500))
+            let buttons = recorders(in: window.contentView!)
+            line("recorders: \(buttons.map(\.debugTitle))")
+            guard let up = buttons.first else { return finish(dir, out + ["no recorder"]) }
+            up.performClick(nil)
+            try? await Task.sleep(for: .milliseconds(300))
+            guard let model = up.debugModel else { return finish(dir, out + ["editor did not open"]) }
+            line("opened: shown \(up.debugShown) title \(up.debugTitle); starts as \(model.combo?.display ?? "-")")
+            model.control = false; model.option = false; model.shift = false; model.command = false
+            model.typed("+")
+            line("plus: key \(model.keyText) shift \(model.shift) combo \(model.combo?.display ?? "-") problem \(model.problem ?? "-")")
+            model.control = true
+            line("plus with ⌃: combo \(model.combo?.display ?? "-") problem \(model.problem ?? "-")")
+            model.control = false; model.shift = false
+            model.typed("k")
+            line("bare k: combo \(model.combo?.display ?? "-") problem \(model.problem ?? "-")")
+            model.typed("kj")
+            line("typed kj: key \(model.keyText)")
+            model.choose(UInt16(kVK_F6))
+            line("F6 alone: combo \(model.combo?.display ?? "-") problem \(model.problem ?? "-")")
+            model.typed("éé")
+            line("not on keyboard: problem \(model.problem ?? "-")")
+            if let down = key([.control, .option], 58, .flagsChanged), let upEvent = key([], 58, .flagsChanged) {
+                _ = model.handle(down); _ = model.handle(upEvent)
+            }
+            line("modifiers with no key: hint \(model.showHint)")
+            if let event = key([.control, .option], 46) { line("press ⌃⌥M used: \(model.handle(event))") }
+            line("pressed: combo \(model.combo?.display ?? "-") moves from \(model.movesFrom) hint \(model.showHint)")
+            model.command = true; model.control = false; model.option = false
+            model.choose(UInt16(kVK_Space))
+            line("⌘Space: system \(model.systemUse ?? "-")")
+            model.command = false; model.control = true; model.option = true
+            model.choose(46)
+            try? await Task.sleep(for: .milliseconds(300))
+            if let view = up.debugPopoverView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                view.cacheDisplay(in: view.bounds, to: rep)
+                try? rep.representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent("editor.png"))
+                line("shot \(Int(view.bounds.width))x\(Int(view.bounds.height))")
+            }
+            model.finish?(.set(model.combo))
+            try? await Task.sleep(for: .milliseconds(1500))
+            line("after Set: up \(store.hotKeyUp?.display ?? "none") down \(store.hotKeyDown?.display ?? "none") mute \(store.hotKeyMute?.display ?? "none"); titles \(buttons.map(\.debugTitle)); editor open \(up.debugModel != nil) shown \(up.debugShown)")
+            up.performClick(nil)
+            try? await Task.sleep(for: .milliseconds(300))
+            if let model = up.debugModel {
+                if let esc = key([], UInt16(kVK_Escape)) { _ = model.handle(esc) }
+                try? await Task.sleep(for: .milliseconds(1500))
+                line("Esc: up \(store.hotKeyUp?.display ?? "none"); editor open \(up.debugModel != nil)")
+            }
+            up.performClick(nil)
+            try? await Task.sleep(for: .milliseconds(300))
+            if let model = up.debugModel {
+                line("Clear enabled: \(model.original != nil)")
+                model.finish?(.set(nil))
+                try? await Task.sleep(for: .milliseconds(1500))
+                line("after Clear: up \(store.hotKeyUp?.display ?? "none"); title \(up.debugTitle)")
+            }
+            finish(dir, out)
+        }
+        return true
+    }
+
+    @MainActor
+    private static func finish(_ dir: URL, _ lines: [String]) {
+        try? (lines.joined(separator: "\n") + "\n").write(to: dir.appendingPathComponent("result.txt"), atomically: true, encoding: .utf8)
     }
 }
 #endif

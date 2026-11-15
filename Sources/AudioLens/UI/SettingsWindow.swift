@@ -330,7 +330,7 @@ struct HotkeySettings: View {
                     ForEach([0.02, 0.05, 0.10, 0.20], id: \.self) { Text(percentText($0)).tag($0) }
                 }
             } footer: {
-                Text("The playing app is the frontmost app if it's making sound, otherwise the app that started playing most recently. Click a shortcut, then press the new keys; Delete clears it.")
+                Text("The playing app is the frontmost app if it's making sound, otherwise the app that started playing most recently. Click a shortcut to change or clear it. Shortcuts need ⌘, ⌥ or ⌃, except F-keys.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -339,7 +339,7 @@ struct HotkeySettings: View {
 
     private func row(_ title: String, _ binding: Binding<Shortcut?>, _ action: HotKeys.Action) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            LabeledContent(title) { ShortcutRecorder(shortcut: binding) }
+            LabeledContent(title) { ShortcutRecorder(shortcut: binding, action: action) }
             if hotkeys.isFailed(action), let key = binding.wrappedValue {
                 Text("Another app is already using \(key.display). Pick another shortcut.").font(.caption).foregroundStyle(.red)
             } else if let key = binding.wrappedValue, let purpose = SystemShortcuts.purpose(of: key) {

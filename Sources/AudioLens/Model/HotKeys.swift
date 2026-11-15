@@ -5,17 +5,19 @@ import SwiftUI
 
 extension Shortcut {
     /// Builds one from a key press. With `requireModifier`, only if it has at least one of
-    /// ⌘ ⌥ ⌃: a bare key as a global shortcut would steal ordinary typing from every app.
+    /// ⌘ ⌥ ⌃ or is an F-key: a bare key as a global shortcut would steal ordinary typing from
+    /// every app.
     init?(event: NSEvent, requireModifier: Bool) {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        if requireModifier, flags.intersection([.command, .option, .control]).isEmpty { return nil }
+        if requireModifier, flags.intersection([.command, .option, .control]).isEmpty,
+           !KeyNames.isFunctionKey(event.keyCode) { return nil }
         self.init(keyCode: event.keyCode, modifiers: Self.modifiers(flags),
                   key: KeyNames.name(keyCode: event.keyCode, characters: event.charactersIgnoringModifiers))
     }
 
     /// Builds one from a key code and Carbon modifiers (ShortcutsLens's Change Shortcut), named
-    /// the way a key press would be in the current keyboard layout. Nil without ⌘ ⌥ or ⌃, as
-    /// the Settings recorder would refuse it.
+    /// the way a key press would be in the current keyboard layout. Nil without ⌘ ⌥ or ⌃
+    /// (F-keys may stand alone), as the Settings editor would refuse it.
     init?(keyCode: Int, carbonModifiers: Int) {
         guard (0...127).contains(keyCode) else { return nil }
         var m: KeyModifiers = []
@@ -23,13 +25,14 @@ extension Shortcut {
         if carbonModifiers & optionKey != 0 { m.insert(.option) }
         if carbonModifiers & shiftKey != 0 { m.insert(.shift) }
         if carbonModifiers & cmdKey != 0 { m.insert(.command) }
-        guard !m.intersection([.control, .option, .command]).isEmpty else { return nil }
         let code = UInt16(keyCode)
+        guard !m.intersection([.control, .option, .command]).isEmpty || KeyNames.isFunctionKey(code) else { return nil }
         self.init(keyCode: code, modifiers: m, key: KeyNames.name(keyCode: code, characters: Self.layoutCharacter(code)))
     }
 
-    /// What the key types with no modifiers in the current layout ("u" for kVK_ANSI_U on QWERTY).
-    private static func layoutCharacter(_ keyCode: UInt16) -> String? {
+    /// What the key types in the current layout, with no modifiers or with ⇧ ("u" for
+    /// kVK_ANSI_U on QWERTY, "+" for kVK_ANSI_Equal with ⇧).
+    static func layoutCharacter(_ keyCode: UInt16, shift: Bool = false) -> String? {
         guard let source = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
               let pointer = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else { return nil }
         let data = Unmanaged<CFData>.fromOpaque(pointer).takeUnretainedValue() as Data
@@ -38,7 +41,8 @@ extension Shortcut {
             var dead: UInt32 = 0
             var chars = [UniChar](repeating: 0, count: 4)
             var length = 0
-            let status = UCKeyTranslate(layout, keyCode, UInt16(kUCKeyActionDisplay), 0, UInt32(LMGetKbdType()),
+            let status = UCKeyTranslate(layout, keyCode, UInt16(kUCKeyActionDisplay),
+                                        shift ? UInt32(shiftKey >> 8) & 0xFF : 0, UInt32(LMGetKbdType()),
                                         OptionBits(kUCKeyTranslateNoDeadKeysBit), &dead, chars.count, &length, &chars)
             guard status == noErr, length > 0 else { return nil }
             return String(utf16CodeUnits: chars, count: length)
@@ -119,7 +123,7 @@ final class HotKeys {
 
     func isFailed(_ action: Action) -> Bool { failed.contains(action.rawValue) }
 
-    /// ShortcutsLens's Change Shortcut: saves the keys as the Settings recorder does (so Settings
+    /// ShortcutsLens's Change Shortcut: saves the keys as the Settings editor does (so Settings
     /// shows them and sync carries them) and registers again. Nil when done, or why not.
     func change(id: String, keyCode: Int, carbonModifiers: Int) -> String? {
         let ids: [(String, Action, String)] = [
@@ -129,7 +133,7 @@ final class HotKeys {
         ]
         guard let action = ids.first(where: { $0.0 == id })?.1 else { return "AudioLens has no shortcut called \(id)." }
         guard let key = Shortcut(keyCode: keyCode, carbonModifiers: carbonModifiers) else {
-            return "AudioLens shortcuts need ⌘, ⌥ or ⌃."
+            return "AudioLens shortcuts need ⌘, ⌥ or ⌃ (F-keys may stand alone)."
         }
         if let other = ids.first(where: { $0.1 != action && shortcut(for: $0.1).map { $0.sameKeys(as: key) } == true }) {
             return "AudioLens already uses \(key.display) to \(other.2.prefix(1).lowercased() + other.2.dropFirst())."
@@ -144,7 +148,7 @@ final class HotKeys {
         return "\(key.display) is taken by another app, so AudioLens kept \(previous?.display ?? "no shortcut")."
     }
 
-    private func shortcut(for action: Action) -> Shortcut? {
+    func shortcut(for action: Action) -> Shortcut? {
         let store = SettingsStore.shared
         switch action {
         case .up: return store.hotKeyUp
@@ -153,13 +157,27 @@ final class HotKeys {
         }
     }
 
-    private func save(_ key: Shortcut?, for action: Action) {
+    func save(_ key: Shortcut?, for action: Action) {
         let store = SettingsStore.shared
         switch action {
         case .up: store.hotKeyUp = key
         case .down: store.hotKeyDown = key
         case .mute: store.hotKeyMute = key
         }
+    }
+
+    /// How Settings names a shortcut.
+    func title(of action: Action) -> String {
+        switch action {
+        case .up: "Turn the playing app up"
+        case .down: "Turn the playing app down"
+        case .mute: "Mute or unmute the playing app"
+        }
+    }
+
+    /// The other shortcuts that use these keys.
+    func others(using key: Shortcut, except action: Action?) -> [Action] {
+        Action.allCases.filter { $0 != action && shortcut(for: $0)?.sameKeys(as: key) == true }
     }
 
     /// Starts answering ShortcutsLens, Change Shortcut included.
@@ -169,7 +187,7 @@ final class HotKeys {
         })
     }
 
-    /// While a shortcut is being recorded, the current ones must not fire.
+    /// While a shortcut is being edited, the current ones must not fire.
     func pause() { paused = true; apply() }
     func resume() { paused = false; apply() }
 
@@ -216,88 +234,4 @@ private func hotKeyHandler(_ next: EventHandlerCallRef?, _ event: EventRef?, _ d
     let which = id.id
     MainActor.assumeIsolated { HotKeys.shared.fire(which) }
     return noErr
-}
-
-/// Click, then press a shortcut. Esc cancels, Delete clears.
-struct ShortcutRecorder: NSViewRepresentable {
-    @Binding var shortcut: Shortcut?
-    var placeholder = "Click to set"
-
-    func makeNSView(context: Context) -> RecorderButton {
-        let view = RecorderButton()
-        update(view)
-        return view
-    }
-
-    func updateNSView(_ view: RecorderButton, context: Context) { update(view) }
-
-    private func update(_ view: RecorderButton) {
-        view.onChange = { shortcut = $0 }
-        view.placeholder = placeholder
-        view.shortcut = shortcut
-    }
-
-    final class RecorderButton: NSButton {
-        var onChange: ((Shortcut?) -> Void)?
-        var placeholder = "Click to set" { didSet { refresh() } }
-        var shortcut: Shortcut? { didSet { refresh() } }
-        private var recording = false { didSet { refresh() } }
-        private var monitor: Any?
-
-        override init(frame: NSRect) {
-            super.init(frame: frame)
-            bezelStyle = .rounded
-            target = self
-            action = #selector(toggle)
-            refresh()
-        }
-
-        required init?(coder: NSCoder) { fatalError() }
-
-        override var intrinsicContentSize: NSSize { NSSize(width: 130, height: super.intrinsicContentSize.height) }
-
-        private func refresh() {
-            title = recording ? "Press keys…" : (shortcut?.display ?? placeholder)
-        }
-
-        @objc private func toggle() { recording ? stop() : start() }
-
-        private func start() {
-            recording = true
-            HotKeys.shared.pause()
-            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-                guard let self else { return event }
-                let bare = event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty
-                switch Int(event.keyCode) {
-                case kVK_Escape where bare:
-                    self.stop()
-                case kVK_Delete where bare, kVK_ForwardDelete where bare:
-                    self.shortcut = nil
-                    self.onChange?(nil)
-                    self.stop()
-                default:
-                    guard let key = Shortcut(event: event, requireModifier: true) else {
-                        NSSound.beep()
-                        return nil
-                    }
-                    self.shortcut = key
-                    self.onChange?(key)
-                    self.stop()
-                }
-                return nil
-            }
-        }
-
-        private func stop() {
-            recording = false
-            if let monitor { NSEvent.removeMonitor(monitor) }
-            monitor = nil
-            HotKeys.shared.resume()
-        }
-
-        override func viewWillMove(toWindow newWindow: NSWindow?) {
-            if newWindow == nil, recording { stop() }
-            super.viewWillMove(toWindow: newWindow)
-        }
-    }
 }
